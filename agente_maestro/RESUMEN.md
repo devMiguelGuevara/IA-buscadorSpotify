@@ -22,7 +22,7 @@ Muestra un PDF o TXT palabra por palabra (lectura rápida) con punto focal en ro
 
 **Activo y funcional.** Última modificación: 10-sep-2026. Ya hay unas 230 canciones descargadas en `musica/` (listas *CancionesDancehall* y *CancionesFavoritasSpotify_busar*).
 
-Es un repositorio git (rama `main`) **sin ningún commit todavía**.
+Repositorio público: https://github.com/devMiguelGuevara/IA-buscadorSpotify. La carpeta local conserva el nombre `IA-buscadorSpottify`.
 
 ## Cómo se usa
 
@@ -63,8 +63,8 @@ En `../Notas sueltas/` están la versión manual previa: el script de consola pa
 
 ## Observaciones y pendientes
 
-- Hacer el primer commit (el `.gitignore` ya protege `.env`, `.cache-spotify`, cookies y `musica/`).
-- El nombre tiene una errata ("Spottify"); el README usa "Spotify".
+- El `.gitignore` protege `.env`, `.cache-spotify`, cookies, `musica/` y `.vscode/`.
+- La carpeta local tiene una errata ("Spottify"); el repositorio de GitHub ya usa "Spotify".
 - El lector rápido no tiene relación con la música; podría vivir como proyecto aparte.
 
 ## Reglas para el agente
