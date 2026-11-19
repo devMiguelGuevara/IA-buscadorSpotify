@@ -1,0 +1,28 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Credenciales y tokens (nunca subirlos)
+.env
+.env.*
+!.env.example
+.cache-spotify
+.cache*
+cookies*.txt
+
+# Resultados generados
+musica/
+*.tmp
+*.log
+registro_descargas.json
+
+# Editores y sistema (settings.json de VS Code incluye un campo apiKey)
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

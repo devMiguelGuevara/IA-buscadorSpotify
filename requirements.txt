@@ -1,0 +1,10 @@
+# Banco de audio (Spotify -> YouTube -> MP3)
+spotipy>=2.25
+yt-dlp[default]>=2026.8.19
+ytmusicapi>=1.10
+mutagen>=1.47
+openpyxl>=3.1
+python-dotenv>=1.0
+
+# Lector rápido
+pypdf>=5.0
