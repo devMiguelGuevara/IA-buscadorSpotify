@@ -84,6 +84,34 @@ const analisis = computed(() => analisisT.value?.resultado);
 const procesa = (m) => m.estado === "disponible" && !m.solo_analisis;
 const disponibles = computed(() => motores.value.filter(procesa));
 const otros = computed(() => motores.value.filter((m) => !procesa(m)));
+
+// ---------- instalar los niveles Mejora e IA desde aquí (también en el .exe)
+const complementos = ref({});
+let relojComp = 0;
+const faltan = computed(() => Object.entries(complementos.value)
+  .filter(([nivel, c]) => !c.instalado && motores.value.some((m) => m.nivel === nivel && m.estado === "instalable")));
+async function revisarComplementos() {
+  try { complementos.value = await (await fetch("/api/complementos")).json(); } catch { return; }
+  const instalando = Object.values(complementos.value).some((c) => c.estado === "instalando");
+  if (!instalando && relojComp) {
+    clearInterval(relojComp);
+    relojComp = 0;
+    cap.value = await (await fetch("/api/mejora/capacidades")).json();
+    motores.value = (await (await fetch("/api/mejora/motores")).json()).motores;
+    for (const m of motores.value)
+      receta[m.id] ??= { activo: false, params: Object.fromEntries(m.parametros.map((q) => [q.id, q.defecto])) };
+  }
+}
+async function instalarNivel(nivel) {
+  await fetch(`/api/complementos/${nivel}`, { method: "POST" });
+  await revisarComplementos();
+  if (!relojComp) relojComp = setInterval(revisarComplementos, 1500);
+}
+onMounted(async () => {
+  await revisarComplementos();
+  if (Object.values(complementos.value).some((c) => c.estado === "instalando")) relojComp = setInterval(revisarComplementos, 1500);
+});
+onBeforeUnmount(() => clearInterval(relojComp));
 // Matchering: canción de referencia elegida de la biblioteca.
 const referencia = ref(null);
 const buscarRef = ref("");
@@ -169,6 +197,16 @@ watch(version, async (v) => {
   espectros.b = await imagen({ version: v.ruta });
 });
 
+const activo = (t) => t && ["en_cola", "procesando"].includes(t.estado);
+async function detener(t) {
+  if (!t) return;
+  await fetch(`/api/mejora/trabajos/${t.id}/cancelar`, { method: "POST" });
+}
+async function detenerInstalacion(nivel) {
+  await fetch(`/api/complementos/${nivel}`, { method: "DELETE" });
+  await revisarComplementos();
+}
+
 function enviarVersion() {
   const v = version.value;
   encolarEnReproductor("encolar", [{
@@ -212,7 +250,10 @@ const METRICAS = [
         <section class="lab-panel">
           <h3>Análisis</h3>
           <p v-if="!analisisT" class="tenue">Sin analizar.</p>
-          <p v-else-if="!analisis" class="wa-vivo">{{ analisisT.estado === "error" ? analisisT.error : "Analizando…" }}</p>
+          <p v-else-if="!analisis" class="wa-vivo">
+            {{ analisisT.estado === "error" ? analisisT.error : analisisT.estado === "cancelado" ? "Análisis detenido." : "Analizando…" }}
+            <a v-if="activo(analisisT)" @click="detener(analisisT)">Detener</a>
+          </p>
           <template v-else>
             <table class="wa-tabla lab-metricas"><tbody>
               <tr v-for="[n, f] in METRICAS" :key="n"><td>{{ n }}</td><td class="num">{{ f(analisis) }}</td></tr>
@@ -262,6 +303,15 @@ const METRICAS = [
             <b>{{ m.nombre }}</b> <span class="tenue">({{ m.estado === "disponible" ? "activo" : m.estado === "instalable" ? "instalable" : "no disponible" }})</span>
             <div class="tenue">{{ m.estado === "disponible" ? m.descripcion : m.motivo }}</div>
           </div>
+          <div v-for="[nivel, c] in faltan" :key="nivel" class="lab-instalar">
+            <button class="wa-boton wa-principal" :disabled="c.estado === 'instalando'" @click="instalarNivel(nivel)">
+              {{ c.estado === "instalando" ? `Instalando nivel ${c.nombre}…` : `Instalar nivel ${c.nombre} (${c.tamano})` }}
+            </button>
+            <div v-if="c.estado === 'instalando'" class="tenue">{{ c.linea }}
+              <a @click="detenerInstalacion(nivel)">Detener</a></div>
+            <div v-else-if="c.estado === 'cancelado'" class="tenue">{{ c.linea }}</div>
+            <div v-else-if="c.estado === 'error'" class="wa-error">No se pudo: {{ c.error }}</div>
+          </div>
           <p v-if="cap" class="tenue lab-cap">
             {{ cap.cpu }} núcleos · {{ cap.ram_gb }} GB RAM · ffmpeg {{ cap.ffmpeg ? "✓" : "✗" }} ·
             IA: {{ cap.ia.torch ? cap.ia.dispositivo.toUpperCase() : "no instalada" }}
@@ -307,8 +357,10 @@ const METRICAS = [
       <button class="wa-boton wa-principal" :disabled="!cancion || !elegidos.length || faltaReferencia || ['en_cola', 'procesando'].includes(procesoT?.estado)" :title="faltaReferencia ? 'Elige la canción de referencia' : ''" @click="procesar">
         Procesar ({{ elegidos.length }})
       </button>
-      <div v-if="procesoT && ['en_cola', 'procesando'].includes(procesoT.estado)" class="wa-barra lab-progreso"><div :style="{ width: procesoT.progreso + '%' }"></div></div>
-      <span class="wa-estado">{{ aviso || (procesoT?.estado === "error" ? procesoT.error : procesoT?.estado === "terminado" ? "Listo: versión creada" : "") }}</span>
+      <div v-if="activo(procesoT)" class="wa-barra lab-progreso"><div :style="{ width: procesoT.progreso + '%' }"></div></div>
+      <button v-if="activo(procesoT)" class="wa-boton" @click="detener(procesoT)">Detener</button>
+      <span class="wa-estado">{{ aviso || (procesoT?.estado === "error" ? procesoT.error : procesoT?.estado === "terminado" ? "Listo: versión creada"
+        : procesoT?.estado === "cancelado" ? "Proceso detenido: no se creó ninguna versión" : "") }}</span>
       <span class="wa-espacio"></span>
       <button class="wa-boton" :disabled="!version" @click="enviarVersion">Al reproductor</button>
     </template>

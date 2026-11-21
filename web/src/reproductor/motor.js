@@ -19,6 +19,7 @@ export const PRESETS = {
 export const motor = reactive({
   lista: [],          // { url, titulo, artista, duracion, kbps, khz }
   actual: -1,
+  cola: [],           // pistas encoladas (Q): suenan antes que el orden de la lista
   seleccion: new Set(),
   estado: "detenido", // detenido | sonando | pausado
   tiempo: 0,
@@ -161,6 +162,8 @@ function cortarFundido() {
 function indiceSiguiente() {
   const n = motor.lista.length;
   if (!n) return null;
+  const encolada = motor.cola.find((p) => motor.lista.includes(p));
+  if (encolada) return motor.lista.indexOf(encolada);
   let i = motor.aleatorio ? Math.floor(Math.random() * n) : motor.actual + 1;
   if (i >= n) {
     if (!motor.repetir) return null;
@@ -174,7 +177,7 @@ function revisarFundido() {
   if (!isFinite(resta) || a.duration < motor.fundido * 3) return;
   if (resta > motor.fundido) {
     if (resta < motor.fundido + 12 && motor.nivelar) { // medir la siguiente con tiempo
-      const s = motor.lista[motor.actual + 1];
+      const s = motor.lista[indiceSiguiente() ?? -1];
       if (s) nivelDe(s.url);
     }
     return;
@@ -191,6 +194,7 @@ async function cruzar(i, segundos) {
   if (fundiendo !== yo) return; // se cortó mientras tanto
   actualP = 1 - actualP;
   yo.cambiado = true;
+  sacarDeCola(p);
   motor.actual = i;
   motor.tiempo = 0;
   motor.duracion = p.duracion || 0;
@@ -237,6 +241,7 @@ export function cargar(i, sonar = true) {
   const p = motor.lista[i];
   if (!p) return;
   cortarFundido();
+  sacarDeCola(p);
   motor.actual = i;
   motor.tiempo = 0;
   motor.duracion = p.duracion || 0;
@@ -248,7 +253,7 @@ export function cargar(i, sonar = true) {
     if (db == null) nivelDe(p.url).then((d) => mio === turno && aplicarNivel(d, true));
     else aplicarNivel(db);
     if (sonar) reproducir();
-    const sig = motor.lista[motor.actual + 1];
+    const sig = motor.aleatorio && !motor.cola.length ? null : motor.lista[indiceSiguiente() ?? -1];
     if (sig && motor.nivelar) nivelDe(sig.url); // la siguiente queda medida de antemano
   });
 }
@@ -292,12 +297,43 @@ export function detener() {
 export function siguiente(automatico = false) {
   const n = motor.lista.length;
   if (!n) return;
-  let i = motor.aleatorio ? Math.floor(Math.random() * n) : motor.actual + 1;
-  if (i >= n) {
-    if (automatico && !motor.repetir) return detener();
-    i = 0;
+  const i = indiceSiguiente();
+  if (i == null) {
+    if (automatico) return detener();
+    return cargar(0);
   }
   cargar(i);
+}
+
+// ---------- cola (Q) y reordenar
+const sacarDeCola = (p) => (motor.cola = motor.cola.filter((x) => x !== p));
+export function encolar(indices) {
+  for (const i of indices) {
+    const p = motor.lista[i];
+    if (!p) continue;
+    if (motor.cola.includes(p)) sacarDeCola(p);
+    else motor.cola = [...motor.cola, p];
+  }
+}
+export const posicionEnCola = (p) => motor.cola.indexOf(p) + 1; // 0 = no encolada
+
+// Mueve las pistas elegidas para que queden antes de la posición `destino` (0..largo).
+export function moverA(indices, destino) {
+  const elegidos = new Set(indices);
+  const actual = motor.lista[motor.actual];
+  const mover = motor.lista.filter((_, i) => elegidos.has(i));
+  const antes = motor.lista.slice(0, destino).filter((_, i) => !elegidos.has(i));
+  const despues = motor.lista.slice(destino).filter((_, i) => !elegidos.has(i + destino));
+  motor.lista = [...antes, ...mover, ...despues];
+  motor.actual = motor.lista.indexOf(actual);
+  motor.seleccion = new Set(mover.map((_, k) => antes.length + k));
+}
+export function moverSeleccion(delta) {
+  const indices = [...motor.seleccion].sort((a, b) => a - b);
+  if (!indices.length) return;
+  if (delta < 0 && indices[0] === 0) return;
+  if (delta > 0 && indices.at(-1) === motor.lista.length - 1) return;
+  moverA(indices, delta < 0 ? indices[0] - 1 : indices.at(-1) + 2);
 }
 
 export function anterior() {
@@ -327,6 +363,7 @@ export function reemplazar(pistas) {
   motor.lista = [...pistas];
   motor.seleccion = new Set();
   motor.actual = -1;
+  motor.cola = [];
   if (pistas.length) cargar(0);
 }
 
@@ -334,6 +371,7 @@ export function quitar(indices) {
   const quitar = new Set(indices);
   const actual = motor.lista[motor.actual];
   motor.lista = motor.lista.filter((_, i) => !quitar.has(i));
+  motor.cola = motor.cola.filter((p) => motor.lista.includes(p));
   motor.seleccion = new Set();
   const nuevo = motor.lista.indexOf(actual);
   if (nuevo < 0 && quitar.has(motor.actual)) {
@@ -348,6 +386,7 @@ export function vaciar() {
   A().removeAttribute("src");
   motor.lista = [];
   motor.actual = -1;
+  motor.cola = [];
   motor.seleccion = new Set();
 }
 

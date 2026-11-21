@@ -221,6 +221,9 @@ html[data-vista="ventana"] body { background: transparent; }
 .pl-fila { display: flex; gap: calc(var(--u) * 4px); padding: 0 calc(var(--u) * 3px); color: var(--pl-texto); cursor: default; }
 .pl-fila.actual { color: var(--pl-actual); }
 .pl-fila.sel { background: var(--pl-sel); color: var(--pl-sel-texto); }
+.pl-fila.marca-antes { box-shadow: inset 0 calc(var(--u) * 1.2px) 0 var(--pl-actual); }
+.pl-fila.marca-despues { box-shadow: inset 0 calc(var(--u) * -1.2px) 0 var(--pl-actual); }
+.pl-cola { color: var(--pl-actual); margin-right: calc(var(--u) * 2px); }
 .pl-nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pl-dur { font-variant-numeric: tabular-nums; }
 .pl-vacia { color: var(--pl-texto); opacity: .6; padding: calc(var(--u) * 8px); text-align: center; }
@@ -287,10 +290,12 @@ html[data-vista="ventana"] body { background: transparent; }
 .lab-motor label { cursor: pointer; }
 .lab-param { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: center; padding: 2px 0 2px 20px; }
 .lab-param input[type=range] { width: 100%; accent-color: var(--wa-texto); }
-.lab-param a { color: var(--wa-actual); cursor: pointer; text-decoration: underline; }
+.lab-param a, .lab-panel a, .lab-instalar a { color: var(--wa-actual); cursor: pointer; text-decoration: underline; margin-left: 4px; }
 .lab-param select { grid-column: span 2; }
 .lab-referencia .lab-buscar { width: auto; grid-column: span 2; }
 .lab-otro { padding: 3px 4px; }
+.lab-instalar { padding: 6px 4px; display: grid; gap: 3px; }
+.lab-instalar .tenue { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lab-cap { margin-top: 10px; font-size: 10px; }
 .lab-version { padding: 4px 6px; margin: 2px 0; cursor: pointer; border: 1px solid transparent; }
 .lab-version span:first-child { margin-right: 8px; }
