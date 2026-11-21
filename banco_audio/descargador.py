@@ -17,10 +17,13 @@ Estrategia para no depender de un solo método (y no quemar la IP):
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
+import subprocess
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 import yt_dlp
@@ -29,9 +32,11 @@ from ytmusicapi import YTMusic
 
 from .cancion import Cancion, normalizar
 from .limitador import Limitador, es_bloqueo
+from .memoria import Memoria
 
 YOUTUBE = "youtube"
 SOUNDCLOUD = "soundcloud"
+OTRO = "otro"  # cualquier otro sitio que yt-dlp soporte
 
 # Clientes de YouTube que se prueban en orden. None = los que yt-dlp elija por defecto.
 # Los dos primeros dan audio de ~128 kbps; el resto solo el formato 18 (peor, pero sirve
@@ -50,11 +55,24 @@ PALABRAS_SOSPECHOSAS = [
 _CARACTERES_INVALIDOS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
+# Métodos de búsqueda: qué fuentes se recorren y en qué orden.
+METODOS = {
+    "auto": ["YouTube Music", "YouTube", "SoundCloud"],
+    "ytmusic": ["YouTube Music"],
+    "youtube": ["YouTube"],
+    "soundcloud": ["SoundCloud"],
+}
+FORMATOS = ("original", "mp3")
+
+
 @dataclass
 class Opciones:
     destino: Path
-    formato: str = "mp3"              # "mp3" (necesita ffmpeg) u "original"
-    calidad: str = "192"              # kbps del mp3 (YouTube da ~128-160 kbps; más no suena mejor)
+    # "original": el mejor stream de audio tal cual (Opus o AAC), sin recodificar: máxima calidad.
+    # "mp3": convierte (compatibilidad); recodificar no suma calidad.
+    formato: str = "original"
+    calidad: str = "320"              # kbps del mp3
+    metodo: str = "auto"              # ver METODOS
     tolerancia: int = 15              # segundos de diferencia aceptables con Spotify
     estricto: bool = False            # no descargar si ningún resultado es convincente
     usar_soundcloud: bool = True
@@ -64,6 +82,7 @@ class Opciones:
     limite_velocidad: str | None = None   # p. ej. "2M" (bytes/s) para no saturar la conexión
     max_bloqueos: int = 3             # bloqueos seguidos de YouTube antes de abandonarlo
     simular: bool = False
+    recordar: bool = True             # memoria de búsquedas (memoria_busquedas.json en el banco)
 
 
 @dataclass
@@ -76,10 +95,22 @@ class Candidato:
     album: str = ""
     puntaje: float = 0.0
     motivos: list[str] = field(default_factory=list)
+    por_isrc: bool = False  # encontrado buscando el ISRC: la misma grabación
 
     @property
     def servicio(self) -> str:
-        return SOUNDCLOUD if self.fuente == "SoundCloud" else YOUTUBE
+        if self.fuente == "SoundCloud":
+            return SOUNDCLOUD
+        return OTRO if self.fuente == "Enlace" else YOUTUBE
+
+
+def fuente_de_url(url: str) -> str:
+    dominio = url.lower()
+    if "soundcloud.com" in dominio:
+        return "SoundCloud"
+    if "youtube.com" in dominio or "youtu.be" in dominio:
+        return "YouTube"
+    return "Enlace"
 
 
 @dataclass
@@ -89,6 +120,7 @@ class Resultado:
     archivo: Path | None = None
     revisar: bool = False
     error: str = ""
+    calidad: dict = field(default_factory=dict)  # códec, kbps y kHz medidos con ffprobe
 
 
 class _LoggerSilencioso:
@@ -103,6 +135,33 @@ def buscar_ffmpeg() -> str | None:
     return ruta if ruta and Path(ruta).exists() else None
 
 
+def medir_calidad(archivo: Path) -> dict:
+    """Códec, kbps, kHz y duración del audio con ffprobe ({} si no se puede medir)."""
+    ffmpeg = buscar_ffmpeg()
+    ffprobe = shutil.which("ffprobe") or (str(Path(ffmpeg).with_name("ffprobe.exe")) if ffmpeg else None)
+    if not ffprobe or not Path(ffprobe).exists():
+        return {}
+    try:
+        salida = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "a:0", "-show_entries",
+             "stream=codec_name,bit_rate,sample_rate:format=bit_rate,duration", "-of", "json", str(archivo)],
+            capture_output=True, text=True, timeout=30,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        datos = json.loads(salida.stdout or "{}")
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return {}
+    pista = (datos.get("streams") or [{}])[0]
+    formato = datos.get("format") or {}
+    bits = pista.get("bit_rate") or formato.get("bit_rate")
+    return {
+        "codec": pista.get("codec_name", ""),
+        "kbps": round(int(bits) / 1000) if bits else None,
+        "khz": round(int(pista["sample_rate"]) / 1000, 1) if pista.get("sample_rate") else None,
+        "duracion": round(float(formato["duration"])) if formato.get("duration") else None,
+    }
+
+
 def nombre_archivo(cancion: Cancion) -> str:
     artista = cancion.artista.split(",")[0].strip() or "Desconocido"
     nombre = _CARACTERES_INVALIDOS.sub("", f"{artista} - {cancion.titulo}")
@@ -114,8 +173,10 @@ class Descargador:
         self.op = opciones
         self.limitador = limitador or Limitador()
         self.detener = threading.Event()
+        self.pausado = threading.Event()  # mientras esté puesto, no se hace ninguna petición nueva
         self._local = threading.local()
         self.ffmpeg = buscar_ffmpeg()
+        self.memoria = Memoria(Path(self.op.destino) / "memoria_busquedas.json") if self.op.recordar else None
         if self.op.formato == "mp3" and not self.ffmpeg and not self.op.simular:
             raise SystemExit(
                 "No se encontró ffmpeg, necesario para convertir a MP3.\n"
@@ -161,12 +222,18 @@ class Descargador:
     def _youtube_disponible(self) -> bool:
         return self.limitador.bloqueos_seguidos(YOUTUBE) < self.op.max_bloqueos
 
+    def _esperar_pausa(self) -> None:
+        while self.pausado.is_set() and not self.detener.is_set():
+            time.sleep(0.3)
+
     def _con_limite(self, servicio: str, funcion):
         """Ejecuta `funcion()` respetando el limitador; registra bloqueos y éxitos.
 
         Cualquier error se re-lanza como DownloadError para tratar igual todos los métodos.
         """
+        self._esperar_pausa()
         self.limitador.esperar(servicio, self.detener)
+        self._esperar_pausa()  # la pausa pudo llegar mientras esperaba su turno
         if self.detener.is_set():
             raise InterruptedError
         try:
@@ -272,15 +339,53 @@ class Descargador:
 
         if c.fuente == "YouTube Music" or c.canal.endswith("- Topic"):
             c.puntaje += 10  # audio oficial subido por la discográfica
+        if c.por_isrc:
+            c.puntaje += 30  # mismo código de grabación que en Spotify
+            c.motivos.append("ISRC")
 
     def _es_convincente(self, cancion: Cancion, c: Candidato) -> bool:
         duracion_ok = not (cancion.duracion and c.duracion) or abs(cancion.duracion - c.duracion) <= self.op.tolerancia
         return c.puntaje >= 45 and duracion_ok
 
+    def _clave_memoria(self, cancion: Cancion) -> str:
+        return f"{self.op.metodo}|{int(self.op.usar_soundcloud)}|{cancion.clave}"
+
     def buscar(self, cancion: Cancion) -> list[Candidato]:
-        """Candidatos ordenados de mejor a peor, recorriendo las fuentes en cascada."""
-        fuentes = ["YouTube Music", "YouTube"] + (["SoundCloud"] if self.op.usar_soundcloud else [])
+        """Como _buscar, pero primero mira la memoria de búsquedas y guarda lo encontrado."""
+        if self.memoria:
+            recordados = self.memoria.leer(self._clave_memoria(cancion), Candidato)
+            if recordados:
+                return recordados
+        candidatos = self._buscar(cancion)
+        if self.memoria:
+            self.memoria.guardar(self._clave_memoria(cancion), candidatos)
+        return candidatos
+
+    def _buscar(self, cancion: Cancion) -> list[Candidato]:
+        """Candidatos ordenados de mejor a peor, recorriendo las fuentes del método en cascada.
+
+        Si la canción trae ISRC (viene de Spotify), primero se busca ese código en
+        YouTube Music: cuando aparece, es la misma grabación.
+        """
+        fuentes = [f for f in METODOS.get(self.op.metodo, METODOS["auto"])
+                   if f != "SoundCloud" or self.op.usar_soundcloud or self.op.metodo == "soundcloud"]
         vistos: dict[str, Candidato] = {}
+        if cancion.isrc and "YouTube Music" in fuentes and self._youtube_disponible():
+            # YouTube Music no indexa el ISRC de forma fiable: a veces devuelve otra canción.
+            # Solo cuenta si además coincide al menos la mitad de las palabras del título.
+            palabras = set(normalizar(cancion.titulo).split())
+            try:
+                for c in self._buscar_en("YouTube Music", cancion.isrc):
+                    if palabras and len(palabras & set(normalizar(c.titulo).split())) / len(palabras) < 0.5:
+                        continue
+                    c.por_isrc = True
+                    self._puntuar(cancion, c)
+                    vistos[c.url] = c
+            except DownloadError:
+                pass
+            ordenados = sorted(vistos.values(), key=lambda c: c.puntaje, reverse=True)
+            if ordenados and self._es_convincente(cancion, ordenados[0]):
+                return ordenados
         for fuente in fuentes:
             if fuente != "SoundCloud" and not self._youtube_disponible():
                 continue
@@ -308,14 +413,20 @@ class Descargador:
         if clientes:
             op["extractor_args"] = {"youtube": {"player_client": list(clientes)}}
         if self.op.formato == "mp3":
+            extraer = {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": self.op.calidad}
+        else:
+            # Máxima calidad: el mejor stream de audio, sin las variantes con rango dinámico
+            # comprimido (DRC). "best" lo saca del video a su contenedor propio (Opus u M4A)
+            # copiando el audio, sin recodificar.
+            op["format"] = "bestaudio[format_id!*=drc]/bestaudio/best"
+            extraer = {"key": "FFmpegExtractAudio", "preferredcodec": "best"}
+        if self.ffmpeg:
             op["writethumbnail"] = True
             op["postprocessors"] = [
-                {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": self.op.calidad},
+                extraer,
                 {"key": "FFmpegThumbnailsConvertor", "format": "jpg", "when": "before_dl"},
                 {"key": "EmbedThumbnail"},
             ]
-        else:
-            op["format"] = "bestaudio[ext=m4a]/bestaudio/best"
         return op
 
     def _descargar_candidato(self, c: Candidato, carpeta: Path, nombre: str) -> Path:
@@ -334,7 +445,28 @@ class Descargador:
                     break  # cambiar de cliente no sirve si la IP está limitada
         raise ultimo_error or DownloadError("YouTube no disponible por bloqueos")
 
+    def descargar_url(self, cancion: Cancion, url: str, carpeta: Path) -> Resultado:
+        """Descarga un enlace concreto, sin buscar: un enlace pegado o un candidato elegido a mano."""
+        c = Candidato(url=url, titulo=cancion.titulo, canal=cancion.artista,
+                      duracion=cancion.duracion, fuente=fuente_de_url(url))
+        if self.op.simular:
+            return Resultado("simulado", c)
+        if c.servicio == YOUTUBE and not self._youtube_disponible():
+            return Resultado("pospuesta", c)
+        carpeta.mkdir(parents=True, exist_ok=True)
+        try:
+            archivo = self._descargar_candidato(c, carpeta, nombre_archivo(cancion))
+        except InterruptedError:
+            return Resultado("pospuesta", c)
+        except DownloadError as e:
+            estado = "pospuesta" if c.servicio == YOUTUBE and not self._youtube_disponible() else "fallo"
+            return Resultado(estado, c, error=str(e).removeprefix("ERROR: ")[:300])
+        etiquetar(archivo, cancion, c)
+        return Resultado("ok", c, archivo, calidad=medir_calidad(archivo))
+
     def procesar(self, cancion: Cancion, carpeta: Path) -> Resultado:
+        if cancion.url:
+            return self.descargar_url(cancion, cancion.url, carpeta)
         try:
             candidatos = self.buscar(cancion)
         except InterruptedError:
@@ -364,10 +496,12 @@ class Descargador:
                 ultimo_error = str(e).removeprefix("ERROR: ")[:300]
                 continue
             etiquetar(archivo, cancion, c)
-            return Resultado("ok", c, archivo, revisar=(c is not mejor) or revisar)
+            return Resultado("ok", c, archivo, revisar=(c is not mejor) or revisar, calidad=medir_calidad(archivo))
 
         if not self._youtube_disponible():
             return Resultado("pospuesta", mejor, error=ultimo_error)
+        if self.memoria:  # ninguno se pudo bajar: la próxima vez se busca de nuevo
+            self.memoria.olvidar(self._clave_memoria(cancion))
         return Resultado("fallo", mejor, error=ultimo_error)
 
 
@@ -382,8 +516,19 @@ def etiquetar(archivo: Path, cancion: Cancion, c: Candidato) -> None:
             audio.add_tags()
         audio["title"] = cancion.titulo
         audio["artist"] = cancion.artista
-        if cancion.album:
-            audio["album"] = cancion.album
+        extras = {
+            "album": cancion.album,
+            "albumartist": cancion.artista.split(",")[0].strip() if cancion.album else "",
+            "tracknumber": str(cancion.numero) if cancion.numero else "",
+            "date": cancion.anio,
+            "isrc": cancion.isrc,
+        }
+        for clave, valor in extras.items():
+            if valor:
+                try:
+                    audio[clave] = valor
+                except (KeyError, ValueError):
+                    pass  # ese formato no admite esta etiqueta
         audio.save()
     except Exception as e:  # las etiquetas son un extra; no deben tumbar la descarga
         print(f"    (no se pudieron escribir las etiquetas: {e})")

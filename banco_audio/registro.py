@@ -46,6 +46,16 @@ class Registro:
             }
             self._escribir()
 
+    def entradas(self) -> list[tuple[str, dict]]:
+        with self._lock:
+            return [(k, dict(v)) for k, v in self._datos.items()]
+
+    def actualizar(self, clave: str, **campos) -> None:
+        with self._lock:
+            if clave in self._datos:
+                self._datos[clave].update(campos)
+                self._escribir()
+
     def _escribir(self) -> None:
         # Escritura atómica: si el proceso se corta no se corrompe el registro.
         temporal = self.ruta.with_suffix(".tmp")

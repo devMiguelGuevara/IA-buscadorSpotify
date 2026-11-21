@@ -39,6 +39,10 @@ class Cancion:
     album: str = ""
     duracion: int | None = None  # en segundos
     spotify_id: str = ""
+    url: str = ""  # enlace directo (YouTube, SoundCloud...): se descarga sin buscar
+    isrc: str = ""      # código único de la grabación (Spotify lo da): búsqueda exacta
+    numero: int | None = None  # número de pista en el álbum
+    anio: str = ""
 
     @property
     def clave(self) -> str:
