@@ -79,6 +79,8 @@ La afinación global, por ejemplo de 440 a 438 Hz, cambia el tono sin cambiar la
 
 La masterización con referencia toma una canción que suena como quieres y ajusta la otra a su tono, sonoridad y anchura estéreo.
 
+Con el nivel IA, el laboratorio separa la canción en voz, batería, bajo y resto: sirve para una versión karaoke, para escuchar solo la voz o para afinar cada instrumento y volver a mezclar.
+
 ## Lo que no hace
 
 - No descarga audio de Spotify. Ese audio está protegido, así que Spotify solo aporta las listas y los datos de cada canción.

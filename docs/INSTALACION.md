@@ -156,4 +156,12 @@ pip install -r requirements-mejora.txt
 
 Agrega la afinación de referencia, el tempo y la tonalidad en el análisis, la masterización con una canción de referencia y un segundo motor de afinación.
 
-El laboratorio muestra qué tiene disponible tu equipo y el comando para lo que falte. La versión empaquetada (`.exe`) trae solo el nivel básico; el nivel Mejora se usa desde el código.
+Para el nivel IA, que separa voz, batería, bajo y resto y permite afinar por instrumento (unos 1,2 GB, funciona solo con CPU):
+
+```bash
+pip install -r requirements-ia.txt
+```
+
+La primera separación baja el modelo, de unos 80 MB. En un equipo de escritorio común tarda más o menos lo que dura la canción; después, elegir otra pista de la misma canción es inmediato.
+
+El laboratorio muestra qué tiene disponible tu equipo y el comando para lo que falte. La versión empaquetada (`.exe`) trae solo el nivel básico; los niveles Mejora e IA se usan desde el código.

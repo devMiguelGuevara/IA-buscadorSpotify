@@ -8,7 +8,7 @@ El repositorio incluye además un lector rápido de PDF y TXT.
 
 - **MigueWamp**, un reproductor de escritorio con tres skins: clásica, moderna y una cabeza flotante. Tiene ecualizador, volumen nivelado, fundido entre canciones, temporizador para dormir, biblioteca por artista y álbum, y playlists propias o importadas.
 - Pega enlaces de YouTube, YouTube Music, Spotify o SoundCloud, rutas de listas o canciones sueltas, y la biblioteca se arma mientras descarga.
-- Un laboratorio opcional para analizar y mejorar el audio, y para cambiar la afinación, sin tocar nunca el original.
+- Un laboratorio opcional para analizar y mejorar el audio, cambiar la afinación y separar voz e instrumentos con IA, sin tocar nunca el original.
 - Lee tus playlists de Spotify o tus "me gusta", o una lista en Excel, CSV o TXT.
 - Busca cada canción y elige la versión que mejor coincide con la original.
 - Descarga el audio en la mejor calidad disponible, sin recodificar, con título, artista, álbum y carátula, y lo ordena por lista.
@@ -84,7 +84,7 @@ Muestra un PDF o TXT palabra por palabra, con velocidad ajustable.
 
 ## Hacia dónde va
 
-- Motores de IA según el equipo, como la separación de pistas.
+- Restauración con IA en un motor remoto, para equipos con GPU.
 - Instaladores para otras máquinas.
 
 ## Aviso
