@@ -13,6 +13,13 @@ set "PY=.venv\Scripts\python.exe"
 set "DIST=dist\MigueWamp"
 set "NUEVO=build\salida\MigueWamp"
 
+rem Con MigueWamp abierto no se puede reemplazar el programa: se avisa antes de tocar nada.
+tasklist /FI "IMAGENAME eq MigueWamp.exe" 2>nul | find /I "MigueWamp.exe" >nul
+if not errorlevel 1 (
+    echo   MigueWamp esta abierto. Cierralo y vuelve a ejecutar empaquetar.bat.
+    goto :error
+)
+
 if not exist "%PY%" (
     echo   Falta el entorno .venv. Ejecuta primero iniciar.bat para crearlo.
     goto :error

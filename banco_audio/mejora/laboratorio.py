@@ -58,6 +58,15 @@ def listar_versiones(original: Path) -> list[dict]:
     return salida
 
 
+class Cancelado(Exception):
+    pass
+
+
+def _revisar(t: dict) -> None:
+    if t.get("cancelar"):
+        raise Cancelado
+
+
 class Laboratorio:
     def __init__(self):
         self.trabajos: dict[str, dict] = {}
@@ -77,17 +86,38 @@ class Laboratorio:
     def procesar(self, original: Path, receta: list[dict], formato: str) -> dict:
         return self._nuevo("proceso", original, receta=receta, formato=formato if formato in FORMATOS else "flac")
 
+    def cancelar(self, id_: str) -> dict | None:
+        """Detiene un trabajo: si espera, no corre; si corre, se corta ffmpeg ya y los motores
+        de Python en su próximo punto de control (Demucs entre bloques)."""
+        t = self.trabajos.get(id_)
+        if t and t["estado"] in ("en_cola", "procesando"):
+            t["cancelar"] = True
+            proc = t.get("_proc")
+            if proc and proc.poll() is None:
+                proc.terminate()
+        return t
+
     def _bucle(self):
         while True:
             t = self.cola.get()
+            if t.get("cancelar"):
+                t["estado"] = "cancelado"
+                continue
             t["estado"] = "procesando"
             try:
                 original = Path(t["original"])
                 t["resultado"] = analisis.analizar(original) if t["tipo"] == "analisis" else self._render(t, original)
                 t["estado"] = "terminado"
                 t["progreso"] = 100
+            except Cancelado:
+                t["estado"] = "cancelado"
             except Exception as e:  # un trabajo que falla no tumba el laboratorio
-                t.update(estado="error", error=f"{type(e).__name__}: {e}")
+                if t.get("cancelar"):
+                    t["estado"] = "cancelado"
+                else:
+                    t.update(estado="error", error=f"{type(e).__name__}: {e}")
+            finally:
+                t.pop("_proc", None)
 
     def _render(self, t: dict, original: Path) -> dict:
         """Etapas en orden: las de ffmpeg en una sola pasada cada una y las de Python entre medio.
@@ -109,6 +139,7 @@ class Laboratorio:
         try:
             actual, n = original, len(pasos)
             for i, (tipo, etapa) in enumerate(pasos):
+                _revisar(t)
                 rango = (int(95 * i / n), int(95 * (i + 1) / n))
                 ultimo = i == n - 1
                 if tipo == "ffmpeg":
@@ -133,6 +164,7 @@ class Laboratorio:
                     etapa = {**etapa, "clave_original": hash_antes}
 
                     def avance(x, r=rango):
+                        _revisar(t)  # Demucs llama aquí entre bloques: se puede detener
                         t["progreso"] = r[0] + int(x * (r[1] - r[0]))
                     procesos_python.correr(etapa, actual, destino, avance)
                     t["progreso"] = rango[1]
@@ -143,6 +175,9 @@ class Laboratorio:
                     if ultimo:
                         self._pasada(t, ffmpeg, destino, original, "anull", salida, FORMATOS[t["formato"]], duracion, (rango[1], rango[1]))
                 actual = destino
+        except BaseException:
+            salida.unlink(missing_ok=True)  # nada de versiones a medias
+            raise
         finally:
             shutil.rmtree(temporal, ignore_errors=True)
         if _hash(original) != hash_antes:  # regla no destructiva
@@ -171,6 +206,7 @@ class Laboratorio:
                  "-af", filtros, *codec, "-progress", "pipe:1", "-nostats", str(destino)]
         proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                 encoding="utf-8", errors="replace", creationflags=SIN_VENTANA)
+        t["_proc"] = proc
         errores: list[str] = []
         lector = threading.Thread(target=lambda: errores.extend(proc.stderr), daemon=True)
         lector.start()
@@ -182,6 +218,7 @@ class Laboratorio:
                 except ValueError:
                     pass
         lector.join()
+        _revisar(t)
         if proc.wait() != 0:
             raise RuntimeError(errores[-1].strip() if errores else "ffmpeg falló")
 

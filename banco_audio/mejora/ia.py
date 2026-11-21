@@ -90,9 +90,13 @@ def separar(entrada_wav: Path, clave: str, al_progreso=None) -> dict[str, Path]:
         media, desvio = ref.mean(), ref.std() + 1e-8
         audio = (audio - media) / desvio
 
+        total = audio.shape[-1]
+
         def avance(d: dict) -> None:
-            if al_progreso and d.get("audio_length"):
-                al_progreso(min(1.0, d.get("segment_offset", 0) / d["audio_length"]))
+            # Demucs avisa al empezar y terminar cada bloque, con su posición en muestras.
+            # Si al_progreso lanza una excepción (cancelar), Demucs la deja pasar y se detiene.
+            if al_progreso:
+                al_progreso(min(1.0, d.get("segment_offset", 0) / total))
 
         with torch.no_grad():
             fuentes = apply_model(modelo, audio[None], device=dispositivo(), shifts=1, split=True,

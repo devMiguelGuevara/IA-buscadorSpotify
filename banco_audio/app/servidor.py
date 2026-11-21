@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .. import actualizador, ajustes, conversion, niveles, playlists
+from .. import actualizador, ajustes, complementos, conversion, niveles, playlists
 from ..biblioteca import EXTENSIONES, escanear, pista
 from ..cancion import segundos_a_duracion
 from ..descargador import FORMATOS, METODOS, Descargador, Opciones
@@ -426,6 +426,23 @@ def crear_app(destino: Path) -> FastAPI:
     def ver_capacidades():
         return capacidades()
 
+    @app.get("/api/complementos")
+    def ver_complementos():
+        return complementos.estado()
+
+    @app.post("/api/complementos/{nivel}")
+    def instalar_complemento(nivel: str):
+        try:
+            complementos.iniciar(nivel)
+        except ValueError as e:
+            raise HTTPException(404, str(e)) from e
+        return complementos.estado()
+
+    @app.delete("/api/complementos/{nivel}")
+    def cancelar_complemento(nivel: str):
+        complementos.cancelar(nivel)
+        return complementos.estado()
+
     @app.get("/api/mejora/motores")
     def ver_motores():
         return {"motores": mejora_motores.catalogo()}
@@ -442,7 +459,7 @@ def crear_app(destino: Path) -> FastAPI:
 
     @app.post("/api/mejora/analizar")
     def analizar(c: Cancion):
-        return laboratorio.analizar(_archivo(c))
+        return _limpio(laboratorio.analizar(_archivo(c)))
 
     @app.post("/api/mejora/procesar")
     def procesar(p: Proceso):
@@ -456,11 +473,21 @@ def crear_app(destino: Path) -> FastAPI:
                     raise HTTPException(400, "Elige la canción de referencia para Matchering")
                 paso = {**paso, "referencia_ruta": str(_archivo(Cancion(**{k: ref[k] for k in ("raiz", "ruta", "version") if k in ref})))}
             receta.append(paso)
-        return laboratorio.procesar(_archivo(p), receta, p.formato)
+        return _limpio(laboratorio.procesar(_archivo(p), receta, p.formato))
+
+    def _limpio(t: dict) -> dict:
+        return {k: v for k, v in t.items() if not k.startswith("_")}
 
     @app.get("/api/mejora/trabajos")
     def trabajos_lab():
-        return {"trabajos": list(laboratorio.trabajos.values())[::-1][:30]}
+        return {"trabajos": [_limpio(t) for t in list(laboratorio.trabajos.values())[::-1][:30]]}
+
+    @app.post("/api/mejora/trabajos/{id_}/cancelar")
+    def cancelar_lab(id_: str):
+        t = laboratorio.cancelar(id_)
+        if not t:
+            raise HTTPException(404)
+        return _limpio(t)
 
     @app.post("/api/mejora/versiones")
     def versiones(c: Cancion):

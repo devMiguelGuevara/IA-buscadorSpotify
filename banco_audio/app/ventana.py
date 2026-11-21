@@ -82,6 +82,8 @@ class GestorVentanas:
             "MigueWamp", self.url, width=ancho, height=int(ancho * 116 / 275 * 2 + 300),
             frameless=True, easy_drag=False, resizable=False, background_color=FONDO, js_api=api)
         self.ventanas["reproductor"] = api._ventana
+        # Cerrar el reproductor (con su botón, Alt+F4 o la barra de tareas) cierra la app entera.
+        api._ventana.events.closed += self.cerrar_todo
 
     def abrir(self, nombre: str):
         import webview
@@ -111,7 +113,9 @@ class GestorVentanas:
         self.ventanas[nombre] = ventana
 
     def cerrar_todo(self):
-        for ventana in list(self.ventanas.values()):
+        ventanas = list(self.ventanas.values())
+        self.ventanas.clear()  # una sola vez: el cierre del reproductor vuelve a llamar aquí
+        for ventana in ventanas:
             try:
                 ventana.destroy()
             except Exception:
@@ -196,8 +200,45 @@ def _salida_sin_consola() -> None:
     sys.stderr = sys.stderr or log
 
 
+def _atar_hijos_al_proceso() -> None:
+    """Windows: mete este proceso en un Job Object con KILL_ON_JOB_CLOSE. Así, al cerrar la app,
+    mueren también sus procesos hijos (ffmpeg, descargas, instalaciones, WebView2)."""
+    if os.name != "nt":
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    class Basica(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD), ("SchedulingClass", wintypes.DWORD)]
+
+    class Extendida(ctypes.Structure):
+        _fields_ = [("Basica", Basica), ("IoInfo", ctypes.c_uint64 * 6), ("ProcessMemoryLimit", ctypes.c_size_t),
+                    ("JobMemoryLimit", ctypes.c_size_t), ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                    ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.GetCurrentProcess.restype = wintypes.HANDLE
+    trabajo = k32.CreateJobObjectW(None, None)
+    if not trabajo:
+        return
+    info = Extendida()
+    info.Basica.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    if k32.SetInformationJobObject(wintypes.HANDLE(trabajo), 9, ctypes.byref(info), ctypes.sizeof(info)):
+        k32.AssignProcessToJobObject(wintypes.HANDLE(trabajo), wintypes.HANDLE(k32.GetCurrentProcess()))
+    global _TRABAJO
+    _TRABAJO = trabajo  # el handle vive mientras viva el proceso
+
+
+_TRABAJO = None
+
+
 def lanzar(destino: Path, navegador: bool = False, puerto: int = 0) -> None:
     _salida_sin_consola()
+    _atar_hijos_al_proceso()
     if not (ESTATICOS / "index.html").exists():
         raise SystemExit("Falta la interfaz compilada. Ejecuta:  cd web  &&  npm install  &&  npm run build")
 
@@ -232,4 +273,13 @@ def lanzar(destino: Path, navegador: bool = False, puerto: int = 0) -> None:
         os.environ.setdefault("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--autoplay-policy=no-user-gesture-required")
         GestorVentanas(url).crear_reproductor()
         webview.start()
+    # Salida firme: las descargas o procesos del laboratorio en curso no deben dejar el
+    # proceso vivo sin ventanas. Lo que estaba a medias se retoma en la próxima ejecución.
     servidor.should_exit = True
+    hilo.join(timeout=2)
+    for flujo in (sys.stdout, sys.stderr):
+        try:
+            flujo.flush()
+        except Exception:
+            pass
+    os._exit(0)
