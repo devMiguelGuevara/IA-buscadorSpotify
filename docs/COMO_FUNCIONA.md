@@ -65,6 +65,7 @@ El programa espera entre una petición y otra. Si un servicio pide bajar el ritm
 - "Abrir ubicación" (Ctrl+L) acepta enlaces, rutas y canciones sueltas, una por línea. Cada descarga terminada entra sola a la lista.
 - **Volumen nivelado** (botón AUTO del ecualizador): todas las canciones suenan parejo, sin tocar los archivos.
 - **Fundido entre canciones** y **temporizador para dormir**, en el menú del reproductor.
+- En la lista: **encolar** con Q o clic derecho (suena a continuación), **reordenar** arrastrando o con Alt+↑/↓.
 - **Artistas y álbumes** en la biblioteca, e **importar listas** `.m3u`, `.m3u8` y `.pls` de otros reproductores.
 - Reproduce también APE, WMA, WavPack, AIFF, Musepack, TTA y AC3: los convierte una vez, solo para escucharlos.
 

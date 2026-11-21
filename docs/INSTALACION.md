@@ -164,4 +164,4 @@ pip install -r requirements-ia.txt
 
 La primera separación baja el modelo, de unos 80 MB. En un equipo de escritorio común tarda más o menos lo que dura la canción; después, elegir otra pista de la misma canción es inmediato.
 
-El laboratorio muestra qué tiene disponible tu equipo y el comando para lo que falte. La versión empaquetada (`.exe`) trae solo el nivel básico; los niveles Mejora e IA se usan desde el código.
+El laboratorio muestra qué tiene disponible tu equipo y el comando para lo que falte. En la versión empaquetada (`.exe`), los niveles Mejora e IA se instalan con el botón del laboratorio: quedan en la carpeta `complementos`, junto al programa.
