@@ -1,0 +1,6 @@
+# Nivel Mejora del laboratorio (opcional, solo CPU, unos 200 MB).
+# Sin esto, el reproductor, las descargas y el laboratorio básico funcionan igual.
+#   pip install -r requirements-mejora.txt
+librosa>=0.11        # afinación de referencia, tempo y tonalidad (ISC)
+pedalboard>=0.9      # Rubber Band desde Python para la afinación (GPL-3.0)
+matchering>=2.0      # masterizar con una canción de referencia (GPL-3.0)
