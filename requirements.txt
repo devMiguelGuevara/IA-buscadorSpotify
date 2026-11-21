@@ -6,5 +6,10 @@ mutagen>=1.47
 openpyxl>=3.1
 python-dotenv>=1.0
 
+# App de escritorio (reproductor estilo Winamp)
+fastapi>=0.115
+uvicorn>=0.30
+pywebview>=5.0
+
 # Lector rápido
 pypdf>=5.0

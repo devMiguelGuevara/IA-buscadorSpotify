@@ -3,9 +3,15 @@
 venv/
 env/
 
-# Python
+# Python: caché, empaquetado y pruebas
 __pycache__/
 *.py[cod]
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Credenciales y tokens (nunca subirlos)
 .env
@@ -15,14 +21,52 @@ __pycache__/
 .cache*
 cookies*.txt
 
-# Resultados generados
+# Documentación privada: solo vive en este equipo
+/privado/
+
+# Listas personales: solo se sube la de ejemplo
+/listas/*
+!/listas/ejemplo.xlsx
+
+# Música y resultados generados
 musica/
+/versiones/
 *.tmp
 *.log
 registro_descargas.json
+
+# Datos de la app
+*.db
+*.sqlite
+*.sqlite3
+ajustes.json
+sesion.json
+
+# Modelos de IA descargados
+/modelos/
+*.pt
+*.pth
+*.onnx
+*.ckpt
+
+# Frontend: el build en banco_audio/app/static/ sí se sube
+web/node_modules/
+web/.vite/
 
 # Editores y sistema (settings.json de VS Code incluye un campo apiKey)
 .vscode/
 .idea/
 Thumbs.db
 desktop.ini
+.DS_Store
+
+# Icono generado al empaquetar
+empaquetado/*.ico
+
+# Versiones mejoradas (derivadas de tu música)
+/versiones/
+/playlists/
+
+# yt-dlp actualizado desde la app
+/componentes/
+/cache/
