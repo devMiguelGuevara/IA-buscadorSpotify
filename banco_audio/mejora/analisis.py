@@ -125,8 +125,8 @@ def avanzado(archivo: Path) -> dict:
             "tempo_bpm": round(float(getattr(tempo, "item", lambda: tempo)()), 1),
             "tonalidad": _tonalidad(cromas),
         }
-    except Exception:
-        return {}
+    except Exception as e:  # el análisis básico sigue; se informa por qué faltó el avanzado
+        return {"error": f"{type(e).__name__}: {e}"[:300]}
 
 
 def analizar(archivo: Path) -> dict:
@@ -137,6 +137,8 @@ def analizar(archivo: Path) -> dict:
     datos["afinacion_hz"] = extra.get("afinacion_hz")
     datos["tempo_bpm"] = extra.get("tempo_bpm")
     datos["tonalidad"] = extra.get("tonalidad")
+    if extra.get("error"):
+        datos["error_avanzado"] = extra["error"]
     datos["problemas"] = diagnosticar(datos)
     return datos
 

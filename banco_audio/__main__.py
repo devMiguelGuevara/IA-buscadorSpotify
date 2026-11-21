@@ -132,6 +132,37 @@ def cmd_actualizar(_args) -> None:
     print(f"yt-dlp {r['version']} instalada y verificada (SHA-256). Se usa desde la próxima ejecución.")
 
 
+def cmd_instalar_complemento(args) -> None:
+    from .complementos import instalar_aqui
+    raise SystemExit(instalar_aqui(args.nivel, Path(args.registro)))
+
+
+def cmd_diagnostico(args) -> None:
+    """Qué puede usar esta instalación (útil en el .exe, que no tiene consola: sale en miguewamp.log)."""
+    from .complementos import estado
+    from .mejora import motores
+    from .mejora.capacidades import capacidades
+    c = capacidades()
+    print(f"Python {sys.version.split()[0]}  ·  {c['sistema']}  ·  {c['cpu']} núcleos  ·  {c['ram_gb']} GB")
+    print("paquetes:", {k: v for k, v in c["paquetes"].items()})
+    print("niveles:", {k: ("instalado" if v["instalado"] else "falta") for k, v in estado().items()})
+    print("motores:", ", ".join(f"{m['id']}={m['estado']}" for m in motores.catalogo()))
+    import importlib
+    import traceback
+    for paquete in ("librosa", "pedalboard", "matchering", "torch", "demucs.apply"):
+        if c["paquetes"].get(paquete.split(".")[0]):
+            try:
+                importlib.import_module(paquete)
+            except Exception:
+                print(f"no carga {paquete}:")
+                traceback.print_exc(limit=3, file=sys.stdout)
+    if args.archivo:
+        from .mejora.analisis import analizar
+        d = analizar(Path(args.archivo))
+        print("análisis:", {k: d.get(k) for k in ("afinacion_hz", "tempo_bpm", "tonalidad", "corte_hz", "error_avanzado")},
+              "LUFS", d["sonoridad"].get("lufs"))
+
+
 def cmd_app(args) -> None:
     from .app.ventana import lanzar
     lanzar(Path(args.destino).expanduser(), navegador=args.navegador, puerto=args.puerto)
@@ -232,6 +263,15 @@ def main(argv: list[str] | None = None) -> None:
 
     p = sub.add_parser("actualizar", help="actualiza yt-dlp (el motor de descargas) a su última versión")
     p.set_defaults(func=cmd_actualizar)
+
+    p = sub.add_parser("instalar-complemento", help=argparse.SUPPRESS)  # lo usa la app
+    p.add_argument("nivel", choices=["mejora", "ia"])
+    p.add_argument("--registro", required=True)
+    p.set_defaults(func=cmd_instalar_complemento)
+
+    p = sub.add_parser("diagnostico", help="muestra qué niveles y motores puede usar esta instalación")
+    p.add_argument("archivo", nargs="?", help="canción para probar el análisis")
+    p.set_defaults(func=cmd_diagnostico)
 
     p = sub.add_parser("app", help="abre el reproductor estilo Winamp con la biblioteca")
     p.add_argument("--destino", default=os.getenv("BANCO_AUDIO_DIR", str(RAIZ / "musica")),

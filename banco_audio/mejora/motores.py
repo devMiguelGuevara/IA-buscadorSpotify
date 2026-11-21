@@ -165,8 +165,8 @@ def catalogo() -> list[dict]:
             estado, motivo = "no_soportado", "Tu ffmpeg no trae: " + ", ".join(faltan_filtros)
         elif faltan_paquetes:
             estado, motivo = "instalable", m.get("instalar", "pip install " + " ".join(faltan_paquetes))
-            if getattr(sys, "frozen", False):  # el .exe no trae el nivel Mejora ni IA
-                motivo = "Se usa desde el código (iniciar.bat), tras: " + motivo
+            nombre_nivel = {"mejora": "Mejora", "ia": "IA"}.get(m["nivel"], m["nivel"])
+            motivo = f"Instala el nivel {nombre_nivel} con el botón de abajo" + ("" if getattr(sys, "frozen", False) else f" (o: {motivo})")
         else:
             estado, motivo = "disponible", ""
         salida.append({k: v for k, v in m.items() if k != "ffmpeg"} | {"estado": estado, "motivo": motivo, "motor": motor_usado})

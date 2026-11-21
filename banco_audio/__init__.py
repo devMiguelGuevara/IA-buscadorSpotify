@@ -11,6 +11,14 @@ from pathlib import Path
 # tiene que activarse antes de cualquier "import yt_dlp".
 RAIZ_APP = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent
 YTDLP_ZIP = RAIZ_APP / "componentes" / "yt-dlp.zip"
+# Niveles opcionales instalados desde el .exe (librosa, Demucs...): ver complementos.py.
+COMPLEMENTOS = RAIZ_APP / "complementos"
+
+
+def activar_complementos() -> None:
+    """En el .exe, suma complementos/ a sys.path (al final: lo incluido en el .exe manda)."""
+    if getattr(sys, "frozen", False) and COMPLEMENTOS.is_dir() and str(COMPLEMENTOS) not in sys.path:
+        sys.path.append(str(COMPLEMENTOS))
 
 
 def version_tupla(v: str) -> tuple[int, ...]:
@@ -54,3 +62,4 @@ def _activar_ytdlp() -> None:
 
 
 _activar_ytdlp()
+activar_complementos()
