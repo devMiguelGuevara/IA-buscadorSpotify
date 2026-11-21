@@ -31,8 +31,27 @@ def masterizar_con_referencia(entrada: Path, salida: Path, referencia: Path) -> 
     mg.process(target=str(entrada), reference=str(referencia), results=[mg.pcm24(str(salida))])
 
 
-def correr(paso: dict, entrada: Path, salida: Path) -> None:
+def separar_y_mezclar(paso: dict, entrada: Path, salida: Path, al_progreso=None) -> None:
+    """Demucs separa (o toma de la caché) y se mezclan las pistas elegidas, reafinadas si se pidió."""
+    import subprocess
+
+    from ..descargador import buscar_ffmpeg
+    from . import ia
+    from .capacidades import SIN_VENTANA
+
+    pistas = ia.SALIDAS.get(paso.get("params", {}).get("salida", "sin_voz"), ia.SALIDAS["sin_voz"])
+    entrada44 = salida.with_name(salida.stem + "_44k.wav")  # Demucs trabaja en estéreo a 44,1 kHz
+    subprocess.run([buscar_ffmpeg(), "-hide_banner", "-loglevel", "error", "-y", "-i", str(entrada),
+                    "-ac", "2", "-ar", "44100", "-c:a", "pcm_f32le", str(entrada44)],
+                   check=True, creationflags=SIN_VENTANA)
+    separadas = ia.separar(entrada44, paso["clave_original"], al_progreso)
+    ia.mezclar(separadas, pistas, salida, paso.get("razon"))
+
+
+def correr(paso: dict, entrada: Path, salida: Path, al_progreso=None) -> None:
     p = paso.get("params", {})
+    if paso["id"] == "separacion":
+        return separar_y_mezclar(paso, entrada, salida, al_progreso)
     if paso["id"] == "afinacion":
         afinar_pedalboard(entrada, salida, float(p["desde"]), float(p["hacia"]))
     elif paso["id"] == "matchering":

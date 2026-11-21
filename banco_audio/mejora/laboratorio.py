@@ -130,9 +130,16 @@ class Laboratorio:
                         self._pasada(t, ffmpeg, Path(ref), Path(ref), "anull", wav_ref, INTERMEDIO, 0, (rango[0], rango[0]))
                         etapa = {**etapa, "referencia_ruta": str(wav_ref)}
                     destino = temporal / f"{i}.wav"
-                    procesos_python.correr(etapa, actual, destino)
+                    etapa = {**etapa, "clave_original": hash_antes}
+
+                    def avance(x, r=rango):
+                        t["progreso"] = r[0] + int(x * (r[1] - r[0]))
+                    procesos_python.correr(etapa, actual, destino, avance)
                     t["progreso"] = rango[1]
-                    descripcion.append(f"[{etapa['id']}: {'Pedalboard' if etapa['id'] == 'afinacion' else 'Matchering'}]")
+                    motor = {"afinacion": "Pedalboard", "matchering": "Matchering"}.get(etapa["id"], "Demucs")
+                    extra = f" {etapa['params'].get('salida', '')}" if etapa["id"] == "separacion" else ""
+                    extra += f" afinada ×{etapa['razon']:.4f}" if etapa.get("razon") else ""
+                    descripcion.append(f"[{etapa['id']}: {motor}{extra}]")
                     if ultimo:
                         self._pasada(t, ffmpeg, destino, original, "anull", salida, FORMATOS[t["formato"]], duracion, (rango[1], rango[1]))
                 actual = destino
@@ -218,9 +225,14 @@ def control_calidad(antes: dict, despues: dict, receta: list[dict]) -> dict:
         objetivo = float(norma.get("params", {}).get("lufs", -14))
         chequeo("Sonoridad en el objetivo", abs(sd["lufs"] - objetivo) <= 1, f"{sd['lufs']:.1f} LUFS (objetivo {objetivo})")
     if sd.get("rms_db") is not None:
-        chequeo("Hay audio", sd["rms_db"] > -60, f"RMS {sd['rms_db']:.1f} dB")
+        separa = any(p.get("id") == "separacion" for p in receta)
+        if separa and sd["rms_db"] <= -60:  # p. ej. "solo voz" de un tema instrumental
+            chequeo("Hay audio", False, "la pista elegida casi no suena: puede que la canción no la tenga", grave=False)
+        else:
+            chequeo("Hay audio", sd["rms_db"] > -60, f"RMS {sd['rms_db']:.1f} dB")
     fallos = [c for c in chequeos if not c["ok"] and c["grave"]]
-    veredicto = "ok" if not fallos else ("falla" if any(c["nombre"] in ("Duración igual", "Hay audio") for c in fallos) else "aviso")
+    avisos = [c for c in chequeos if not c["ok"] and not c["grave"]]
+    veredicto = "aviso" if not fallos and avisos else "ok" if not fallos else ("falla" if any(c["nombre"] in ("Duración igual", "Hay audio") for c in fallos) else "aviso")
     return {"veredicto": veredicto, "chequeos": chequeos}
 
 

@@ -21,7 +21,8 @@ a = Analysis(
     hiddenimports=ocultos,
     # El nivel Mejora (librosa, Pedalboard, Matchering) es opcional y no va en el .exe: aparece como "instalable".
     excludes=["tkinter", "pypdf", "pytest", "librosa", "pedalboard", "matchering", "numba", "llvmlite",
-              "scipy", "sklearn", "pandas", "statsmodels", "soundfile", "resampy", "soxr", "numpy"],
+              "scipy", "sklearn", "pandas", "statsmodels", "soundfile", "resampy", "soxr", "numpy",
+              "torch", "torchaudio", "demucs", "dora", "julius", "openunmix", "huggingface_hub"],
 )
 pyz = PYZ(a.pure)
 exe = EXE(

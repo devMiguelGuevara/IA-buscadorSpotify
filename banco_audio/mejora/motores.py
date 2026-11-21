@@ -126,14 +126,27 @@ MOTORES = [
     },
     {
         "id": "separacion", "nombre": "Separar pistas (Demucs)", "categoria": "ia", "nivel": "ia",
-        "descripcion": "Voz, batería, bajo y resto. Habilita la afinación por instrumento.",
-        "licencia": "MIT (revisar pesos)", "paquetes": ["torch", "demucs"],
-        "instalar": "pip install torch demucs   (CPU; con GPU NVIDIA, el comando de pytorch.org)", "parametros": [],
+        "descripcion": "Separa voz, batería, bajo y resto con IA y se queda con lo que elijas. "
+                       "En CPU tarda más o menos lo que dura la canción (solo la primera vez).",
+        "licencia": "MIT", "paquetes": ["torch", "demucs"], "python": True,
+        "instalar": "pip install -r requirements-ia.txt",
+        "parametros": [_op("salida", "Quedarse con", [
+            ("sin_voz", "Sin voz (karaoke)"), ("voz", "Solo voz"), ("bateria", "Solo batería"), ("bajo", "Solo bajo"),
+            ("resto", "Solo resto (instrumentos)"), ("sin_bateria", "Sin batería"), ("sin_bajo", "Sin bajo")], "sin_voz")],
+    },
+    {
+        "id": "afinacion_instrumentos", "nombre": "Afinación por instrumento", "categoria": "afinacion", "nivel": "ia",
+        "descripcion": "Separa la canción, reafina voz, bajo y resto (la batería no) y vuelve a mezclar. "
+                       "Suena más natural en algunos temas, pero no conserva la mezcla original exacta.",
+        "licencia": "MIT + Rubber Band", "paquetes": ["torch", "demucs"], "python": True,
+        "instalar": "pip install -r requirements-ia.txt",
+        "parametros": [_p("desde", "Afinación actual (A4)", 415, 466, 440, 0.5, "Hz"),
+                       _p("hacia", "Afinación nueva (A4)", 415, 466, 432, 0.5, "Hz")],
     },
 ]
 
 # Orden fijo en la cadena: restaurar, corregir, colorear, afinar, masterizar y limitar al final.
-ORDEN = ["declick", "declip", "ruido", "eq", "compresor", "estereo", "afinacion", "matchering", "normalizar", "limitador"]
+ORDEN = ["separacion", "afinacion_instrumentos", "declick", "declip", "ruido", "eq", "compresor", "estereo", "afinacion", "matchering", "normalizar", "limitador"]
 
 
 def catalogo() -> list[dict]:
@@ -173,6 +186,16 @@ def etapas(receta: list[dict]) -> list[tuple[str, object]]:
     filtros, paquetes = set(cap["filtros"]), cap["paquetes"]
     por_id = {m["id"]: m for m in MOTORES if "ffmpeg" in m or m.get("python")}
     pasos = sorted((p for p in receta if p.get("id") in por_id), key=lambda p: ORDEN.index(p["id"]))
+    # Separar y afinar por instrumento son una sola etapa: se separa una vez y se mezcla lo elegido.
+    ids = [p["id"] for p in pasos]
+    if "afinacion_instrumentos" in ids:
+        afinar = pasos.pop(ids.index("afinacion_instrumentos"))
+        dados = _params(por_id["afinacion_instrumentos"], afinar)
+        razon = dados["hacia"] / dados["desde"]
+        if pasos and pasos[0]["id"] == "separacion":
+            pasos[0] = {**pasos[0], "razon": razon}
+        else:
+            pasos.insert(0, {"id": "separacion", "params": {"salida": "todas"}, "razon": razon})
     salida: list[tuple[str, object]] = []
     for paso in pasos:
         motor = por_id[paso["id"]]

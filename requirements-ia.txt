@@ -1,0 +1,8 @@
+# Nivel IA del laboratorio (opcional): separar pistas y afinar por instrumento.
+# Unos 1,2 GB con PyTorch solo CPU. En un i7-7700 separa más o menos a la duración de la canción.
+#   pip install -r requirements-ia.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.6
+torchaudio>=2.6
+demucs>=4.0          # Meta, MIT: voz, batería, bajo y resto
+soundfile>=0.12
