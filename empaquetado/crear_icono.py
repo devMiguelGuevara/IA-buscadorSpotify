@@ -5,6 +5,9 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 DESTINO = Path(__file__).with_name("MigueWamp.ico")
+# El mismo rayo para la interfaz: ícono de la ventana y de la barra de tareas (también al
+# correr desde el código).
+PUBLICO = Path(__file__).resolve().parent.parent / "web" / "public"
 
 
 def dibujar(tam: int) -> Image.Image:
@@ -21,4 +24,7 @@ def dibujar(tam: int) -> Image.Image:
 if __name__ == "__main__":
     tamanos = [16, 24, 32, 48, 64, 128, 256]
     dibujar(256).save(DESTINO, sizes=[(s, s) for s in tamanos])
-    print(f"Icono creado: {DESTINO}")
+    PUBLICO.mkdir(parents=True, exist_ok=True)
+    dibujar(256).save(PUBLICO / "favicon.ico", sizes=[(s, s) for s in tamanos])
+    dibujar(512).save(PUBLICO / "icono-512.png")
+    print(f"Icono creado: {DESTINO} y {PUBLICO}")

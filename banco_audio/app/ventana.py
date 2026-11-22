@@ -200,6 +200,72 @@ def _salida_sin_consola() -> None:
     sys.stderr = sys.stderr or log
 
 
+APP_ID = "devMiguelGuevara.MigueWamp"
+ICONO = ESTATICOS / "favicon.ico"
+
+
+def _identidad_en_windows() -> None:
+    """Windows agrupa la app por su propio identificador, no con Python (al correr desde el código)."""
+    if os.name == "nt":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+        except Exception:
+            pass
+
+
+def _relanzar_como_app(ventana) -> None:
+    """Datos para "Anclar a la barra de tareas": abrir MigueWamp (no Python), con su nombre y su rayo."""
+    if os.name != "nt" or ventana.native is None:
+        return
+    import ctypes
+    import uuid
+    from ctypes import POINTER, Structure, WINFUNCTYPE, byref, c_ubyte, c_ulong, c_ushort, c_void_p
+
+    class GUID(Structure):
+        _fields_ = [("Data1", c_ulong), ("Data2", c_ushort), ("Data3", c_ushort), ("Data4", c_ubyte * 8)]
+
+    def guid(texto):
+        u, g = uuid.UUID(texto), GUID()
+        g.Data1, g.Data2, g.Data3 = u.time_low, u.time_mid, u.time_hi_version
+        g.Data4[:] = list(u.bytes[8:])
+        return g
+
+    class ClavePropiedad(Structure):
+        _fields_ = [("fmtid", GUID), ("pid", c_ulong)]
+
+    class Variante(Structure):  # PROPVARIANT con un texto (VT_LPWSTR)
+        _fields_ = [("vt", c_ushort), ("r1", c_ushort), ("r2", c_ushort), ("r3", c_ushort), ("p", c_void_p), ("p2", c_void_p)]
+
+    if getattr(sys, "frozen", False):
+        comando = f'"{sys.executable}"'
+    else:
+        pythonw = Path(sys.executable).with_name("pythonw.exe")
+        comando = f'"{pythonw if pythonw.exists() else sys.executable}" "{Path(__file__).resolve().parents[2] / "MigueWamp.py"}"'
+    valores = {5: APP_ID, 2: comando, 4: "MigueWamp", 3: f"{ICONO},0"}  # ID, comando, nombre, ícono
+
+    ctypes.windll.ole32.CoInitialize(None)
+    almacen = c_void_p()
+    hwnd = c_void_p(int(ventana.native.Handle.ToInt64()))
+    if ctypes.windll.shell32.SHGetPropertyStoreForWindow(hwnd, byref(guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99")), byref(almacen)) != 0:
+        return
+    tabla = ctypes.cast(almacen, POINTER(POINTER(c_void_p * 8))).contents.contents
+    poner = WINFUNCTYPE(ctypes.HRESULT, c_void_p, POINTER(ClavePropiedad), POINTER(Variante))(tabla[6])
+    confirmar = WINFUNCTYPE(ctypes.HRESULT, c_void_p)(tabla[7])
+    soltar = WINFUNCTYPE(c_ulong, c_void_p)(tabla[2])
+    textos = []
+    try:
+        for pid, texto in valores.items():
+            buf = ctypes.create_unicode_buffer(texto)
+            textos.append(buf)
+            var = Variante(vt=31)
+            var.p = ctypes.cast(buf, c_void_p)
+            poner(almacen, byref(ClavePropiedad(guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), pid)), byref(var))
+        confirmar(almacen)
+    finally:
+        soltar(almacen)
+
+
 def _atar_hijos_al_proceso() -> None:
     """Windows: mete este proceso en un Job Object con KILL_ON_JOB_CLOSE. Así, al cerrar la app,
     mueren también sus procesos hijos (ffmpeg, descargas, instalaciones, WebView2)."""
@@ -239,6 +305,7 @@ _TRABAJO = None
 def lanzar(destino: Path, navegador: bool = False, puerto: int = 0) -> None:
     _salida_sin_consola()
     _atar_hijos_al_proceso()
+    _identidad_en_windows()
     if not (ESTATICOS / "index.html").exists():
         raise SystemExit("Falta la interfaz compilada. Ejecuta:  cd web  &&  npm install  &&  npm run build")
 
@@ -271,8 +338,17 @@ def lanzar(destino: Path, navegador: bool = False, puerto: int = 0) -> None:
         # El reproductor recibe órdenes de otras ventanas (biblioteca, descargas) sin un clic
         # propio: sin esto, el motor web bloquearía el sonido.
         os.environ.setdefault("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--autoplay-policy=no-user-gesture-required")
-        GestorVentanas(url).crear_reproductor()
-        webview.start()
+        gestor = GestorVentanas(url)
+        gestor.crear_reproductor()
+        reproductor = gestor.ventanas["reproductor"]
+
+        def al_mostrar():
+            try:
+                _relanzar_como_app(reproductor)
+            except Exception as e:  # no es grave: solo afecta a anclar la app
+                print(f"No se pudieron fijar los datos para anclar: {e}")
+        reproductor.events.shown += al_mostrar
+        webview.start(icon=str(ICONO) if ICONO.exists() else None)
     # Salida firme: las descargas o procesos del laboratorio en curso no deben dejar el
     # proceso vivo sin ventanas. Lo que estaba a medias se retoma en la próxima ejecución.
     servidor.should_exit = True
