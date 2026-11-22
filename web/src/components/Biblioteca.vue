@@ -30,11 +30,18 @@ function avisar(texto) {
 }
 
 // ---------- vistas
+// Cada descarga deja su carpeta y su lista (.m3u8, que también nombra lo bajado antes por otra
+// lista). Se muestran juntas, una vez, y solo si todavía tienen canciones.
 const listas = computed(() => {
   const conteo = {};
   for (const c of estado.canciones) if (c.raiz === 0 && c.lista) conteo[c.lista] = (conteo[c.lista] || 0) + 1;
-  return Object.entries(conteo).sort();
+  for (const p of estado.playlists)
+    if (p.descarga && p.canciones) conteo[p.nombre] = Math.max(conteo[p.nombre] || 0, p.canciones);
+  return Object.entries(conteo).sort((a, b) => a[0].localeCompare(b[0], "es", { sensitivity: "base" }));
 });
+const esListaDescargada = (nombre) => estado.playlists.some((p) => p.descarga && p.nombre === nombre && p.canciones);
+const propias = computed(() => estado.playlists.filter((p) => !p.descarga));
+const carpetasVisibles = computed(() => carpetas.value.slice(1).filter((c) => c.existe));
 const enPlaylist = computed(() => nodo.value.startsWith("playlist:"));
 const nombrePlaylist = computed(() => (enPlaylist.value ? nodo.value.slice(9) : ""));
 
@@ -72,7 +79,9 @@ const visibles = computed(() => {
     if (explorar.album != null) lista = lista.filter((c) => albumDe(c) === explorar.album);
     lista = [...lista].sort(porAlbum);
   }
-  if (nodo.value.startsWith("lista:")) lista = lista.filter((c) => c.raiz === 0 && c.lista === nodo.value.slice(6));
+  if (nodo.value.startsWith("lista:"))
+    lista = esListaDescargada(nodo.value.slice(6)) ? pistasPlaylist.value.filter((c) => c.existe !== false)
+      : lista.filter((c) => c.raiz === 0 && c.lista === nodo.value.slice(6));
   else if (nodo.value.startsWith("carpeta:")) lista = lista.filter((c) => c.raiz === Number(nodo.value.slice(8)));
   else if (enPlaylist.value) lista = pistasPlaylist.value;
   const f = filtro.value.trim().toLowerCase();
@@ -84,8 +93,10 @@ async function ir(destino) {
   nodo.value = destino;
   seleccion.value = new Set();
   formulario.value = null;
-  if (destino.startsWith("playlist:")) {
-    try { pistasPlaylist.value = (await api.playlist(destino.slice(9))).pistas; } catch { pistasPlaylist.value = []; }
+  const nombre = destino.startsWith("playlist:") ? destino.slice(9)
+    : destino.startsWith("lista:") && esListaDescargada(destino.slice(6)) ? destino.slice(6) : null;
+  if (nombre != null) {
+    try { pistasPlaylist.value = (await api.playlist(nombre)).pistas; } catch { pistasPlaylist.value = []; }
   }
   if (destino === "carpetas") cargarCarpetas();
 }
@@ -109,7 +120,7 @@ const seleccionadas = () => {
 
 // ---------- playlists
 function abrirFormulario(modo) {
-  formulario.value = { modo, nombre: modo === "agregar" ? estado.playlists[0]?.nombre || "" : "" };
+  formulario.value = { modo, nombre: modo === "agregar" ? propias.value[0]?.nombre || "" : "" };
 }
 async function guardarEnPlaylist() {
   const f = formulario.value;
@@ -205,13 +216,14 @@ async function accionCarpeta(fn, ruta) {
         <a :class="{ activo: nodo === 'todas' }" @click="ir('todas')">Todo ({{ estado.canciones.length }})</a>
         <a class="hijo" :class="{ activo: nodo === 'explorar' }" @click="ir('explorar')">Artistas y álbumes ({{ artistas.length }})</a>
         <a v-for="[l, n] in listas" :key="l" class="hijo" :class="{ activo: nodo === 'lista:' + l }" @click="ir('lista:' + l)">{{ l }} ({{ n }})</a>
-        <template v-for="c in carpetas.slice(1)" :key="c.i">
+        <template v-for="c in carpetasVisibles" :key="c.i">
           <a class="hijo" :class="{ activo: nodo === 'carpeta:' + c.i }" :title="c.ruta" @click="ir('carpeta:' + c.i)">📁 {{ c.ruta.split(/[\\/]/).pop() }}</a>
         </template>
 
         <div class="ml-grupo">Playlists</div>
-        <a v-for="p in estado.playlists" :key="p.nombre" :class="{ activo: nodo === 'playlist:' + p.nombre }" @click="ir('playlist:' + p.nombre)">
-          {{ p.nombre }} ({{ p.canciones }})
+        <a v-for="p in propias" :key="p.nombre" :class="{ activo: nodo === 'playlist:' + p.nombre }" @click="ir('playlist:' + p.nombre)"
+           :title="p.total > p.canciones ? `${p.total - p.canciones} canciones de esta playlist ya no existen` : ''">
+          {{ p.nombre }} ({{ p.canciones }}<template v-if="p.total > p.canciones"> de {{ p.total }}</template>)
         </a>
         <a class="tenue" @click="ir('todas'); abrirFormulario('nueva')">+ Nueva playlist…</a>
         <a v-if="nativo()" class="tenue" title="Trae una lista .m3u, .m3u8 o .pls de otro reproductor" @click="importarLista">+ Importar lista…</a>
@@ -291,7 +303,7 @@ async function accionCarpeta(fn, ruta) {
           <template v-else>
             <span>Agregar a:</span>
             <select v-model="formulario.nombre" class="wa-entrada">
-              <option v-for="p in estado.playlists" :key="p.nombre" :value="p.nombre">{{ p.nombre }}</option>
+              <option v-for="p in propias" :key="p.nombre" :value="p.nombre">{{ p.nombre }}</option>
             </select>
           </template>
           <span class="tenue">{{ seleccion.size || visibles.length }} canciones</span>
@@ -334,7 +346,7 @@ async function accionCarpeta(fn, ruta) {
         <button class="wa-boton" :disabled="!visibles.length" @click="emit('encolar', seleccionadas().map(pista))">Encolar</button>
         <template v-if="!enPlaylist">
           <button class="wa-boton" :disabled="!visibles.length" @click="abrirFormulario('nueva')">Nueva playlist</button>
-          <button class="wa-boton" :disabled="!visibles.length || !estado.playlists.length" @click="abrirFormulario('agregar')">A playlist</button>
+          <button class="wa-boton" :disabled="!visibles.length || !propias.length" @click="abrirFormulario('agregar')">A playlist</button>
         </template>
         <template v-else>
           <button class="wa-boton" :disabled="!seleccion.size" @click="quitarDePlaylist">Quitar</button>

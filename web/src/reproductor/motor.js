@@ -96,11 +96,30 @@ watch(() => motor.volumen, (v) => platos.forEach((p) => (p.audio.volume = v)), {
 
 // ---------- volumen nivelado: cada canción a -14 LUFS (medido una vez por el servicio)
 const niveles = new Map(); // url -> Promise<dB>
+const medidas = [];         // dB ya medidos: su mediana es el volumen provisional
 function nivelDe(url) {
   if (!niveles.has(url))
     niveles.set(url, fetch("/api/nivel?url=" + encodeURIComponent(url))
-      .then((r) => (r.ok ? r.json() : {})).then((d) => d.ganancia_db ?? 0).catch(() => 0));
+      .then((r) => (r.ok ? r.json() : {})).then((d) => {
+        const db = d.ganancia_db ?? 0;
+        if (d.lufs != null) medidas.push(db);
+        return db;
+      }).catch(() => 0));
   return niveles.get(url);
+}
+function provisional() {
+  if (!medidas.length) return -4; // lo típico de una canción actual (unos -10 LUFS)
+  const o = [...medidas].sort((a, b) => a - b);
+  return o[Math.floor(o.length / 2)];
+}
+// El servicio mide en segundo plano lo que entra a la lista: al tocarlo ya suena nivelado.
+const pedidas = new Set();
+function precalcular(pistas) {
+  const urls = pistas.map((p) => p.url).filter((u) => u && !pedidas.has(u) && /^\/(media|versiones)\//.test(u));
+  if (!urls.length) return;
+  urls.forEach((u) => pedidas.add(u));
+  fetch("/api/nivel/lote", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rutas: urls }) }).catch(() => {});
 }
 const gananciaNivel = (db) => (motor.nivelar ? 10 ** (db / 20) : 1);
 function fijarGanancia(plato, g, segundos = 0) {
@@ -115,7 +134,10 @@ function aplicarNivel(db, suave = false) {
   motor.nivelDb = db;
   fijarGanancia(platos[actualP], gananciaNivel(db), suave ? 0.4 : 0);
 }
-watch(() => motor.nivelar, () => aplicarNivel(motor.nivelDb, true));
+watch(() => motor.nivelar, (on) => {
+  aplicarNivel(motor.nivelDb, true);
+  if (on) precalcular(motor.lista);
+});
 // Medida de una pista: espera como mucho `ms`; si no llega, devuelve null.
 async function medidaRapida(url, ms) {
   if (!motor.nivelar) return 0;
@@ -247,11 +269,14 @@ export function cargar(i, sonar = true) {
   motor.duracion = p.duracion || 0;
   A().src = p.url;
   const mio = ++turno;
-  // La primera vez se espera la medida (como mucho 2,5 s) para no arrancar con otro volumen.
-  medidaRapida(p.url, 2500).then((db) => {
+  // Suena enseguida: si la medida no está en 0,3 s, arranca con un volumen provisional
+  // y se ajusta suave cuando llega (casi siempre ya está, medida de antemano).
+  medidaRapida(p.url, 300).then((db) => {
     if (mio !== turno) return; // ya se cambió de canción
-    if (db == null) nivelDe(p.url).then((d) => mio === turno && aplicarNivel(d, true));
-    else aplicarNivel(db);
+    if (db == null) {
+      aplicarNivel(provisional());
+      nivelDe(p.url).then((d) => mio === turno && aplicarNivel(d, true));
+    } else aplicarNivel(db);
     if (sonar) reproducir();
     const sig = motor.aleatorio && !motor.cola.length ? null : motor.lista[indiceSiguiente() ?? -1];
     if (sig && motor.nivelar) nivelDe(sig.url); // la siguiente queda medida de antemano
@@ -353,12 +378,14 @@ export function irA(segundos) {
 export const adelantar = (s) => irA(Math.min(motor.duracion, Math.max(0, A().currentTime + s)));
 
 export function agregar(pistas, sonarYa = false) {
+  if (motor.nivelar) precalcular(pistas);
   const inicio = motor.lista.length;
   motor.lista.push(...pistas);
   if (sonarYa && pistas.length) cargar(inicio);
 }
 
 export function reemplazar(pistas) {
+  if (motor.nivelar) precalcular(pistas);
   detener();
   motor.lista = [...pistas];
   motor.seleccion = new Set();

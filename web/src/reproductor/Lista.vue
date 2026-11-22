@@ -160,7 +160,8 @@ async function abrirMenuLista() {
 }
 const opcionesLista = () => [
   ["Guardar como playlist…", guardarComoPlaylist],
-  ...playlists.value.map((p) => [`Cargar «${p.nombre}» (${p.canciones})`, () => cargarPlaylist(p.nombre)]),
+  ...playlists.value.filter((p) => p.canciones)
+    .map((p) => [`Cargar «${p.nombre}» (${p.canciones})${p.descarga ? " · descarga" : ""}`, () => cargarPlaylist(p.nombre)]),
   ["Vaciar lista", () => vaciar()],
   ["Biblioteca y playlists…", () => abrirVentana("biblioteca")],
 ];
