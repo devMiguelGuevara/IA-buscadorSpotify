@@ -82,7 +82,7 @@ python lector/lector_rapido.py
 
 Muestra un PDF o TXT palabra por palabra, con velocidad ajustable.
 
-## Hacia dónde va
+## A futuro
 
 - Restauración con IA en un motor remoto, para equipos con GPU.
 - Instaladores para otras máquinas.

@@ -18,7 +18,7 @@ Muestra un PDF o TXT palabra por palabra, con velocidad ajustable.
 
 ## Estado
 
-**Activo y funcional.** Ya es MigueWamp: reproductor de escritorio estilo Winamp con 3 skins (la "Cabeza" en vectores, con forma de ventana real), biblioteca con carpetas y playlists, descargas en máxima calidad con varios métodos (Fase 2), y laboratorio de mejora y afinación (niveles Base y Mejora: librosa, Pedalboard, Matchering). Se empaqueta como `.exe` y `.zip` portátil (incluye ffmpeg y Node) con `empaquetar.bat`. Fase 7 hecha: yt-dlp actualizable, memoria de búsquedas, volumen nivelado, fundido y temporizador, artistas y álbumes, importar .m3u/.pls y formatos APE/WMA/WV/AIFF/MPC/TTA/AC3. Fase 8 hecha en CPU: separar pistas (Demucs) y afinación por instrumento. Siguiente: instalación (9) y Rust (10).
+**Activo y funcional.** Ya es MigueWamp: reproductor de escritorio estilo Winamp con 3 skins (la "Cabeza" en vectores, con forma de ventana real), biblioteca con carpetas y playlists, descargas en máxima calidad con varios métodos (Fase 2), y laboratorio de mejora y afinación (niveles Base y Mejora: librosa, Pedalboard, Matchering). Se empaqueta como `.exe` y `.zip` portátil (incluye ffmpeg y Node) con `empaquetar.bat`. Fase 7 hecha: yt-dlp actualizable, memoria de búsquedas, volumen nivelado, fundido y temporizador, artistas y álbumes, importar .m3u/.pls y formatos APE/WMA/WV/AIFF/MPC/TTA/AC3. Fase 8 hecha en CPU: separar pistas (Demucs) y afinación por instrumento. **Versión estable 1.0 (21-nov-2026):** lo pendiente (instalación avanzada, Rust, restauración con GPU, pruebas automáticas) queda como futuro, sin fecha.
 
 Repositorio público: https://github.com/devMiguelGuevara/IA-buscadorSpotify. La carpeta local conserva el nombre `IA-buscadorSpottify`.
 
