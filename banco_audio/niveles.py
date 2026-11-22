@@ -78,6 +78,48 @@ def ganancia(medida: dict) -> float:
     return round(max(GANANCIA_MIN, min(GANANCIA_MAX, g)), 2)
 
 
+_pendientes: list[Path] = []
+_hay_pendientes = threading.Event()
+
+
+def _trabajador() -> None:
+    while True:
+        _hay_pendientes.wait()
+        with _lock:
+            archivo = _pendientes.pop(0) if _pendientes else None
+            if not _pendientes:
+                _hay_pendientes.clear()
+        if archivo:
+            try:
+                nivel(archivo)
+            except Exception:
+                pass
+
+
+def precalcular(archivos: list[Path]) -> int:
+    """Encola archivos para medirlos de a uno en segundo plano. Devuelve cuántos faltaban."""
+    nuevos = []
+    with _lock:
+        datos = _cargar()
+        for a in archivos:
+            try:
+                estado = a.stat()
+            except OSError:
+                continue
+            entrada = datos.get(str(a))
+            if entrada and entrada.get("firma") == f"{estado.st_size}:{int(estado.st_mtime)}":
+                continue
+            if a not in _pendientes:
+                nuevos.append(a)
+        _pendientes.extend(nuevos)
+        if _pendientes:
+            _hay_pendientes.set()
+    return len(nuevos)
+
+
+threading.Thread(target=_trabajador, daemon=True, name="niveles").start()
+
+
 def nivel(archivo: Path) -> dict:
     estado = archivo.stat()
     firma = f"{estado.st_size}:{int(estado.st_mtime)}"

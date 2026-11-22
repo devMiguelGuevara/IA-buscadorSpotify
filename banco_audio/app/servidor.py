@@ -302,9 +302,8 @@ def crear_app(destino: Path) -> FastAPI:
                 raise HTTPException(415, str(e)) from e
         return FileResponse(archivo)
 
-    @app.get("/api/nivel")
-    def nivel(url: str):
-        """Ganancia para el volumen nivelado de una pista del reproductor (/media/... o /versiones/...)."""
+    def _archivo_de_url(url: str) -> Path:
+        """El archivo de una pista del reproductor (/media/<i>/... o /versiones/...), validado."""
         ruta = unquote(urlsplit(url).path)
         partes = ruta.lstrip("/").split("/", 2)
         if partes[0] == "media" and len(partes) == 3 and partes[1].isdigit():
@@ -320,12 +319,28 @@ def crear_app(destino: Path) -> FastAPI:
             raise HTTPException(404)
         if not archivo.is_relative_to(base) or not archivo.is_file():
             raise HTTPException(404)
-        return niveles.nivel(archivo)
+        return archivo
+
+    @app.get("/api/nivel")
+    def nivel(url: str):
+        """Ganancia para el volumen nivelado de una pista del reproductor."""
+        return niveles.nivel(_archivo_de_url(url))
+
+    @app.post("/api/nivel/lote")
+    def precalcular_niveles(datos: Rutas):
+        """Mide en segundo plano las pistas de la lista, para que suenen sin esperar."""
+        archivos = []
+        for url in datos.rutas[:2000]:
+            try:
+                archivos.append(_archivo_de_url(url))
+            except HTTPException:
+                continue
+        return {"en_cola": niveles.precalcular(archivos)}
 
     # ---------------- playlists
     @app.get("/api/playlists")
     def ver_playlists():
-        return {"playlists": playlists.listar()}
+        return {"playlists": playlists.listar(ajustes.carpetas())}
 
     @app.get("/api/playlists/{nombre}")
     def ver_playlist(nombre: str):

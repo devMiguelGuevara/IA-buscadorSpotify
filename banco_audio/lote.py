@@ -80,7 +80,7 @@ def escribir_lista(nombre: str, canciones: list[Cancion], registro: Registro, de
                        "titulo": c.titulo, "artista": c.artista, "duracion": c.duracion})
     if not pistas:
         return 0
-    return playlists.guardar(nombre, pistas, [destino])
+    return playlists.guardar(nombre, pistas, [destino], descarga=True)
 
 
 def ejecutar(descargador, pendientes: list[Cancion], carpeta: Path, *, registro: Registro,

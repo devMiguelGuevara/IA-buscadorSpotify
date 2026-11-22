@@ -11,6 +11,9 @@ from pathlib import Path
 from .spotify import RAIZ
 
 CARPETA = RAIZ / "playlists"
+# Las listas que escribe cada descarga llevan esta marca: la app las muestra como
+# "listas descargadas" (no como playlists propias) y las oculta si ya no tienen canciones.
+MARCA_DESCARGA = "#MIGUEWAMP:descarga"
 _INVALIDOS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
@@ -21,11 +24,30 @@ def _archivo(nombre: str) -> Path:
     return CARPETA / f"{limpio}.m3u8"
 
 
-def listar() -> list[dict]:
+def listar(raices: list[Path] | None = None) -> list[dict]:
+    """Playlists con cuántas canciones existen hoy (canciones) y cuántas nombra (total)."""
     if not CARPETA.exists():
         return []
-    return [{"nombre": p.stem, "canciones": sum(1 for _ in _entradas(p))}
-            for p in sorted(CARPETA.glob("*.m3u8"), key=lambda p: p.stem.lower())]
+    descargas = raices[0].resolve() if raices else None
+    salida = []
+    for p in sorted(CARPETA.glob("*.m3u8"), key=lambda p: p.stem.lower()):
+        rutas = [r for r, _, _ in _entradas(p) if not isinstance(r, str)]
+        salida.append({"nombre": p.stem, "canciones": sum(1 for r in rutas if r.is_file()), "total": len(rutas),
+                       "descarga": _es_de_descarga(p, rutas, descargas)})
+    return salida
+
+
+def _es_de_descarga(archivo: Path, rutas: list[Path], descargas: Path | None) -> bool:
+    if MARCA_DESCARGA in _texto(archivo):
+        return True
+    # Listas de descargas anteriores a la marca: se llaman como la carpeta de la lista.
+    for r in rutas:
+        try:
+            if descargas and r.resolve().relative_to(descargas).parts[0] == archivo.stem:
+                return True
+        except (ValueError, IndexError, OSError):
+            continue
+    return False
 
 
 def _texto(archivo: Path) -> str:
@@ -141,13 +163,17 @@ def leer(nombre: str, raices: list[Path]) -> list[dict]:
     return pistas
 
 
-def guardar(nombre: str, pistas: list[dict], raices: list[Path], agregar: bool = False) -> int:
-    """Escribe la playlist. Con agregar=True suma las pistas al final de la existente."""
+def guardar(nombre: str, pistas: list[dict], raices: list[Path], agregar: bool = False,
+            descarga: bool = False) -> int:
+    """Escribe la playlist. Con agregar=True suma las pistas al final de la existente.
+    descarga=True la marca como la lista de una descarga."""
     CARPETA.mkdir(parents=True, exist_ok=True)
     archivo = _archivo(nombre)
     lineas = []
     if agregar and archivo.exists():
-        lineas = [l for l in archivo.read_text(encoding="utf-8-sig").splitlines() if l.strip() and l.strip() != "#EXTM3U"]
+        previo = _texto(archivo)
+        descarga = descarga or MARCA_DESCARGA in previo
+        lineas = [l for l in previo.splitlines() if l.strip() and l.strip() not in ("#EXTM3U", MARCA_DESCARGA)]
     for p in pistas:
         try:
             ruta = raices[int(p["raiz"])] / p["ruta"]
@@ -155,7 +181,8 @@ def guardar(nombre: str, pistas: list[dict], raices: list[Path], agregar: bool =
             continue
         nombre_pista = f"{p.get('artista')} - {p.get('titulo')}" if p.get("artista") else (p.get("titulo") or ruta.stem)
         lineas += [f"#EXTINF:{int(p.get('duracion') or -1)},{nombre_pista}", str(ruta.resolve())]
-    archivo.write_text("#EXTM3U\n" + "\n".join(lineas) + "\n", encoding="utf-8")
+    cabecera = "#EXTM3U\n" + (MARCA_DESCARGA + "\n" if descarga else "")
+    archivo.write_text(cabecera + "\n".join(lineas) + "\n", encoding="utf-8")
     return sum(1 for l in lineas if not l.startswith("#"))
 
 
