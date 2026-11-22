@@ -36,6 +36,7 @@ export const motor = reactive({
   nivelar: true,      // volumen nivelado (botón AUTO del ecualizador)
   nivelDb: 0,         // ganancia aplicada a la canción actual
   fundido: 0,         // segundos de fundido entre canciones (0 = sin fundido)
+  velocidad: 1,       // velocidad de reproducción (conserva el tono)
   dormir: 0,          // temporizador: 0, minutos o "cancion" (al terminar la canción)
   dormirFin: 0,       // hora (ms) en que se apaga
   aviso: "", // mensaje breve para la pantalla (errores, confirmaciones)
@@ -93,6 +94,10 @@ export function aplicarEq() {
 }
 watch(() => [motor.eqActivo, motor.preamp, motor.balance, ...motor.bandas], aplicarEq);
 watch(() => motor.volumen, (v) => platos.forEach((p) => (p.audio.volume = v)), { immediate: true });
+watch(() => motor.velocidad, (v) => platos.forEach((p) => {
+  p.audio.defaultPlaybackRate = v; // se mantiene al cambiar de canción
+  p.audio.playbackRate = v;
+}), { immediate: true });
 
 // ---------- volumen nivelado: cada canción a -14 LUFS (medido una vez por el servicio)
 const niveles = new Map(); // url -> Promise<dB>
@@ -387,6 +392,7 @@ export function agregar(pistas, sonarYa = false) {
 export function reemplazar(pistas) {
   if (motor.nivelar) precalcular(pistas);
   detener();
+  liberar(motor.lista.filter((p) => !pistas.includes(p)));
   motor.lista = [...pistas];
   motor.seleccion = new Set();
   motor.actual = -1;
@@ -394,8 +400,14 @@ export function reemplazar(pistas) {
   if (pistas.length) cargar(0);
 }
 
+// Las pistas elegidas con el selector son enlaces a memoria (blob:): se liberan al quitarlas.
+function liberar(pistas) {
+  for (const p of pistas) if (p.local && p.url?.startsWith("blob:")) URL.revokeObjectURL(p.url);
+}
+
 export function quitar(indices) {
   const quitar = new Set(indices);
+  liberar(motor.lista.filter((_, i) => quitar.has(i) && i !== motor.actual));
   const actual = motor.lista[motor.actual];
   motor.lista = motor.lista.filter((_, i) => !quitar.has(i));
   motor.cola = motor.cola.filter((p) => motor.lista.includes(p));
@@ -410,6 +422,7 @@ export function quitar(indices) {
 
 export function vaciar() {
   detener();
+  liberar(motor.lista);
   A().removeAttribute("src");
   motor.lista = [];
   motor.actual = -1;

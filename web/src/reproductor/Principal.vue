@@ -8,7 +8,9 @@ import { anterior, detener, irA, mmss, motor, pausa, pistaActual, reproducir, si
 import { abrirVentana, arrastrarVentana, nativo } from "../ventanas/nativo.js";
 import { agregarArchivos } from "./disco.js";
 
-const props = defineProps({ eq: Boolean, pl: Boolean, skin: String });
+// holgura: espacio extra (en unidades del dibujo) arriba y abajo de la barra de tiempo. Lo usa
+// la vista compacta para arrastrarla con el dedo sin tocar el volumen ni los botones.
+const props = defineProps({ eq: Boolean, pl: Boolean, skin: String, holgura: { type: Number, default: 0 } });
 const emit = defineEmits(["alternar-eq", "alternar-pl", "menu"]);
 const svg = ref(null);
 const moderna = computed(() => props.skin === "moderna");
@@ -94,10 +96,10 @@ const TRANSPORTE = [
 </script>
 
 <template>
-  <svg ref="svg" class="wa-svg" viewBox="0 0 275 116" @contextmenu.prevent="emit('menu', $event)">
+  <svg ref="svg" class="wa-svg" :viewBox="`0 0 275 ${116 + 2 * holgura}`" @contextmenu.prevent="emit('menu', $event)">
     <!-- marco -->
-    <rect class="marco" x="0.5" y="0.5" width="274" height="115" />
-    <rect class="marco-luz" x="1.2" y="1.2" width="272.6" height="113.6" />
+    <rect class="marco" x="0.5" y="0.5" width="274" :height="115 + 2 * holgura" />
+    <rect class="marco-luz" x="1.2" y="1.2" width="272.6" :height="113.6 + 2 * holgura" />
 
     <!-- barra de título: arrastra la ventana real -->
     <g @pointerdown="arrastrarVentana" @dblclick="emit('menu', $event)">
@@ -105,8 +107,9 @@ const TRANSPORTE = [
       <path class="rayas" d="M22 5h74M22 7h74M22 9h74M22 11h74M180 5h58M180 7h58M180 9h58M180 11h58" />
       <text x="138" y="10.8" class="titulo-texto">MIGUEWAMP</text>
     </g>
-    <g class="boton" @click="emit('menu', $event)" title="Menú">
-      <rect class="cara" x="6" y="4" width="9" height="8" rx="1" /><path class="icono" d="M8 7h5M8 9h5" />
+    <g class="boton" @click="emit('menu', $event)" title="Menú de MigueWamp">
+      <rect class="cara" x="6" y="4" width="9" height="8" rx="1" />
+      <path class="rayo-menu" d="M11.4 4.8 8.3 8.5h2l-1.1 2.9 3.6-4.2h-2.1l1.4-2.4z" />
     </g>
     <g class="boton-mini" @click="nativo()?.minimizar()"><rect x="243" y="4" width="9" height="8" rx="1" /><path d="M245.5 10h4" /></g>
     <g class="boton-mini" @click="nativo()?.cerrar()"><rect x="257" y="4" width="9" height="8" rx="1" /><path d="M259.5 6l4 4M263.5 6l-4 4" /></g>
@@ -181,9 +184,9 @@ const TRANSPORTE = [
       <text x="258.5" y="66" class="boton-texto">PL</text>
     </g>
 
-    <!-- posición -->
-    <g class="clic" @pointerdown="buscar">
-      <rect x="16" y="71" width="248" height="12" fill="transparent" />
+    <!-- posición (con holgura, baja y su zona táctil ocupa el espacio libre) -->
+    <g class="clic" :transform="`translate(0 ${holgura})`" @pointerdown="buscar">
+      <rect x="16" :y="71 - holgura * 0.7" width="248" :height="12 + holgura * 1.4" fill="transparent" />
       <rect x="16.5" y="74.5" width="247" height="6" rx="1" class="ranura" />
       <g v-if="motor.duracion && motor.estado !== 'detenido'" :transform="`translate(${16 + 219 * posicion} 72)`">
         <rect class="perilla-pos" width="29" height="10" rx="1" />
@@ -191,7 +194,8 @@ const TRANSPORTE = [
       </g>
     </g>
 
-    <!-- transporte -->
+    <!-- transporte, aleatorio, repetir y logo: bajan con la holgura -->
+    <g :transform="`translate(0 ${2 * holgura})`">
     <template v-if="!moderna">
       <g v-for="b in TRANSPORTE" :key="b.x" class="boton" :transform="`translate(${b.x} 88)`" @click="b.accion">
         <rect class="cara" x="0.5" y="0.5" :width="b.w - 1" height="17" />
@@ -232,6 +236,7 @@ const TRANSPORTE = [
     <g class="clic" @click="abrirVentana('biblioteca')">
       <rect x="248" y="87" width="20" height="19" fill="transparent" />
       <path d="M260 88.5l-7 9h5l-3 8.5 9-11h-5l3-6.5z" :fill="'var(--logo)'" stroke="#4a3a00" stroke-width="0.6" />
+    </g>
     </g>
   </svg>
 </template>

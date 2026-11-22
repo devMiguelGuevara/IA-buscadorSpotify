@@ -25,7 +25,8 @@ function teclas(e) {
 
 // Las ventanas sueltas toman la skin activa del reproductor (y la siguen si cambia).
 async function seguirSkin() {
-  const skin = (await nativo()?.leer_ajustes())?.reproductor?.skin;
+  const r = (await nativo()?.leer_ajustes())?.reproductor;
+  const skin = r?.skin === "compacta" ? r.baseCompacta || "clasica" : r?.skin;
   if (skin) document.documentElement.dataset.skin = skin;
 }
 

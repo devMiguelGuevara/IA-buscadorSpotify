@@ -1,12 +1,17 @@
 <script setup>
 // Biblioteca multimedia de MigueWamp: lo descargado y tus carpetas, las playlists propias
 // y el manejo de rutas (carpeta de descargas y carpetas extra).
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import Mas from "./Mas.vue";
 import VentanaWinamp from "./VentanaWinamp.vue";
 import { api, clave, duracion, nativo, pista } from "../api.js";
 import { cargarBiblioteca, cargarPlaylists, estado } from "../estado.js";
 
+const props = defineProps({ compacta: Boolean }); // dentro de la vista compacta
 const emit = defineEmits(["cerrar", "reproducir", "encolar", "abrir"]);
+const arbolAbierto = ref(false); // en la vista compacta, el árbol es un desplegable
+const POR_PAGINA = 50;
+const mostrar = ref(POR_PAGINA); // filas dibujadas: al bajar se suman 50 más
 const nodo = ref("todas");        // todas | explorar | lista:<x> | carpeta:<i> | playlist:<nombre> | carpetas
 const filtro = ref("");
 const seleccion = ref(new Set());
@@ -89,8 +94,20 @@ const visibles = computed(() => {
   return lista;
 });
 
+const nombreNodo = computed(() => {
+  const n = nodo.value;
+  if (n === "todas") return "Todo";
+  if (n === "explorar") return "Artistas y álbumes";
+  if (n === "carpetas") return "Carpetas de música";
+  return n.slice(n.indexOf(":") + 1);
+});
+watch(filtro, () => (mostrar.value = POR_PAGINA));
+watch(() => [explorar.artista, explorar.album], () => (mostrar.value = POR_PAGINA));
+
 async function ir(destino) {
   nodo.value = destino;
+  arbolAbierto.value = false;
+  mostrar.value = POR_PAGINA;
   seleccion.value = new Set();
   formulario.value = null;
   const nombre = destino.startsWith("playlist:") ? destino.slice(9)
@@ -210,8 +227,9 @@ async function accionCarpeta(fn, ruta) {
 
 <template>
   <VentanaWinamp titulo="MigueWamp · Biblioteca multimedia" @cerrar="emit('cerrar')">
-    <div class="ml">
-      <nav class="ml-arbol">
+    <div class="ml" :class="{ compacta }">
+      <button v-if="compacta" class="wa-boton ml-ver" @click="arbolAbierto = !arbolAbierto">Ver: {{ nombreNodo }} ▾</button>
+      <nav class="ml-arbol" :class="{ abierto: arbolAbierto }">
         <div class="ml-grupo">Biblioteca</div>
         <a :class="{ activo: nodo === 'todas' }" @click="ir('todas')">Todo ({{ estado.canciones.length }})</a>
         <a class="hijo" :class="{ activo: nodo === 'explorar' }" @click="ir('explorar')">Artistas y álbumes ({{ artistas.length }})</a>
@@ -231,8 +249,10 @@ async function accionCarpeta(fn, ruta) {
         <div class="ml-grupo">Rutas</div>
         <a :class="{ activo: nodo === 'carpetas' }" @click="ir('carpetas')">Carpetas de música</a>
 
-        <div class="ml-grupo">Mejora</div>
-        <a @click="aLaboratorio">Laboratorio…</a>
+        <template v-if="!compacta">
+          <div class="ml-grupo">Mejora</div>
+          <a @click="aLaboratorio">Laboratorio…</a>
+        </template>
 
         <div class="ml-grupo">Agregar</div>
         <a @click="emit('abrir', 'ubicacion')">Abrir ubicación…</a>
@@ -312,15 +332,18 @@ async function accionCarpeta(fn, ruta) {
         </div>
         <div class="ml-tabla">
           <table class="wa-tabla" v-if="visibles.length">
-            <thead><tr><th v-if="nodo === 'explorar'" class="num">#</th><th>Artista</th><th>Título</th><th>Álbum</th><th class="num">Duración</th><th>Calidad</th><th>Lista</th></tr></thead>
+            <thead><tr><th v-if="nodo === 'explorar'" class="num">#</th><th>Artista</th><th>Título</th><th class="col-extra">Álbum</th><th class="num">Duración</th><th class="col-extra">Calidad</th><th class="col-extra">Lista</th></tr></thead>
             <tbody>
-              <tr v-for="(c, i) in visibles" :key="clave(c) + i" :class="{ sel: seleccion.has(clave(c)) }"
+              <tr v-for="(c, i) in visibles.slice(0, mostrar)" :key="clave(c) + i" :class="{ sel: seleccion.has(clave(c)) }"
                   @click="elegir(c, i, $event)" @dblclick="emit('reproducir', [pista(c)])">
                 <td v-if="nodo === 'explorar'" class="num">{{ c.numero || "" }}</td>
-                <td>{{ c.artista }}</td><td>{{ c.titulo }}</td><td>{{ c.album }}<span v-if="c.anio" class="tenue"> · {{ c.anio }}</span></td>
+                <td>{{ c.artista }}</td><td>{{ c.titulo }}</td><td class="col-extra">{{ c.album }}<span v-if="c.anio" class="tenue"> · {{ c.anio }}</span></td>
                 <td class="num">{{ duracion(c.duracion) }}</td>
-                <td>{{ c.formato }}{{ c.kbps ? ` ${c.kbps}k` : "" }}</td>
-                <td>{{ c.lista }}</td>
+                <td class="col-extra">{{ c.formato }}{{ c.kbps ? ` ${c.kbps}k` : "" }}</td>
+                <td class="col-extra">{{ c.lista }}</td>
+              </tr>
+              <tr v-if="visibles.length > mostrar" class="fila-mas">
+                <td colspan="7"><Mas :quedan="visibles.length - mostrar" @ver="mostrar += POR_PAGINA" /></td>
               </tr>
             </tbody>
           </table>
@@ -353,7 +376,7 @@ async function accionCarpeta(fn, ruta) {
           <button class="wa-boton" @click="borrarPlaylist">{{ confirmarBorrado ? "¿Seguro? Clic otra vez" : "Borrar playlist" }}</button>
         </template>
       </template>
-      <button v-if="nodo !== 'carpetas'" class="wa-boton" :disabled="!seleccion.size" @click="aLaboratorio">Mejorar…</button>
+      <button v-if="nodo !== 'carpetas' && !compacta" class="wa-boton" :disabled="!seleccion.size" @click="aLaboratorio">Mejorar…</button>
       <button class="wa-boton" @click="cargarBiblioteca(); cargarPlaylists(); cargarCarpetas()">Actualizar</button>
       <span class="wa-estado">{{ aviso || (nodo === "carpetas" ? carpetas.length + " carpetas" : visibles.length + " elementos" + (seleccion.size ? ` · ${seleccion.size} seleccionadas` : "")) }}</span>
     </template>

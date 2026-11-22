@@ -47,7 +47,11 @@ export async function encolarEnReproductor(accion, pistas) {
   });
 }
 
-export const abrirVentana = (nombre) => nativo()?.abrir(nombre);
+// En el escritorio abre una ventana del sistema; en la vista compacta cambia de
+// pestaña: la vista compacta registra su propio manejador.
+let manejadorVentanas = null;
+export const alAbrirVentana = (fn) => (manejadorVentanas = fn);
+export const abrirVentana = (nombre) => (manejadorVentanas ? manejadorVentanas(nombre) : nativo()?.abrir(nombre));
 
 // Forma de la ventana del reproductor: unión de capas (la skin, el menú abierto...).
 // Cada capa es una lista plana [x, y, w, h, ...] en píxeles CSS. Sin capas = rectangular.

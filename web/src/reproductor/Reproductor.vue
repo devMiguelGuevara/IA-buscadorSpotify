@@ -9,25 +9,28 @@ import Principal from "./Principal.vue";
 import Ecualizador from "./Ecualizador.vue";
 import Lista from "./Lista.vue";
 import HeadAmp from "./HeadAmp.vue";
+import Compacta from "./Compacta.vue";
 import MenuContexto from "./MenuContexto.vue";
 import { adelantar, agregar, anterior, detener, motor, pausa, programarDormir, reemplazar, reproducir, siguiente } from "./motor.js";
 import { abrirVentana, fijarForma, nativo, redimensionarVentana } from "../ventanas/nativo.js";
 import { alTerminarDescarga, revisarDescargas } from "../estado.js";
 import { soltarArchivos } from "./disco.js";
 
-const SKINS = { clasica: "Clásica", moderna: "Moderna", cabeza: "Cabeza" };
+const SKINS = { clasica: "Clásica", moderna: "Moderna", cabeza: "Cabeza", compacta: "Compacta (vertical)" };
 const ANCHO_BASE = 275, ALTO_BASE = 116;
 const CABEZA = { ancho: 760, alto: 394 }; // lienzo de la skin "Cabeza"
 
 const v = reactive({
   skin: "clasica", eq: true, pl: true, altoLista: 200, listo: false,
-  anchos: { clasica: 412, moderna: 412, cabeza: 1140 },
+  anchos: { clasica: 412, moderna: 412, cabeza: 1140, compacta: 400 },
+  altoCompacta: 760, baseCompacta: "clasica", // la compacta es alta y angosta, con aspecto clásico o moderno
   cabezaElegida: false, // el usuario ya eligió un tamaño para la cabeza
 });
 const escalaCabeza = computed(() => ancho.value / CABEZA.ancho);
 const ancho = computed(() => v.anchos[v.skin]);
 const u = computed(() => ancho.value / ANCHO_BASE);
 const altoTotal = computed(() => {
+  if (v.skin === "compacta") return Math.round(v.altoCompacta);
   if (v.skin === "cabeza") return Math.round((ancho.value * CABEZA.alto) / CABEZA.ancho);
   const separacion = v.skin === "moderna" ? 2 * u.value * ((v.eq ? 1 : 0) + (v.pl ? 1 : 0)) : 0;
   return Math.round(ALTO_BASE * u.value * (v.eq ? 2 : 1) + (v.pl ? v.altoLista * u.value : 0) + separacion);
@@ -35,7 +38,13 @@ const altoTotal = computed(() => {
 
 const skinUrl = new URLSearchParams(location.search).get("skin");
 if (skinUrl && SKINS[skinUrl]) v.skin = skinUrl;
-watch(() => v.skin, (s) => (document.documentElement.dataset.skin = s), { immediate: true });
+// La compacta toma los colores de la clásica o de la moderna (las ventanas sueltas también).
+const skinVisual = computed(() => (v.skin === "compacta" ? v.baseCompacta : v.skin));
+watch(skinVisual, (s) => (document.documentElement.dataset.skin = s), { immediate: true });
+function desdeCompacta(cual) {
+  if (cual === "completo") v.skin = v.baseCompacta;
+  else v.baseCompacta = cual;
+}
 
 // --- tamaño de la ventana real
 let ultimo = "";
@@ -51,11 +60,12 @@ watch(() => [v.skin, ancho.value, altoTotal.value], () => {
   if (v.skin !== "cabeza") fijarForma("skin", [0, 0, Math.round(ancho.value) + 2, altoTotal.value + 2]);
 }, { immediate: true });
 let guardado = 0;
-watch(() => [v.skin, ancho.value, v.eq, v.pl, v.altoLista, motor.nivelar, motor.fundido], () => {
+watch(() => [v.skin, ancho.value, v.eq, v.pl, v.altoLista, v.altoCompacta, v.baseCompacta, motor.nivelar, motor.fundido], () => {
   aplicarTamano();
   clearTimeout(guardado);
   guardado = setTimeout(() => nativo()?.guardar_ajustes({
-    reproductor: { skin: v.skin, anchos: { ...v.anchos }, eq: v.eq, pl: v.pl, altoLista: v.altoLista, cabezaElegida: v.cabezaElegida, nivelar: motor.nivelar, fundido: motor.fundido },
+    reproductor: { skin: v.skin, anchos: { ...v.anchos }, eq: v.eq, pl: v.pl, altoLista: v.altoLista, cabezaElegida: v.cabezaElegida,
+                   altoCompacta: v.altoCompacta, baseCompacta: v.baseCompacta, nivelar: motor.nivelar, fundido: motor.fundido },
   }), 400);
 });
 
@@ -63,6 +73,9 @@ function agrandar(e) {
   redimensionarVentana(e, (w, h) => {
     if (v.skin === "cabeza") {
       v.anchos.cabeza = Math.min(1800, Math.max(420, w));
+    } else if (v.skin === "compacta") {
+      v.anchos.compacta = Math.min(760, Math.max(320, w));
+      v.altoCompacta = Math.min(1600, Math.max(480, h));
     } else {
       v.anchos[v.skin] = Math.min(1600, Math.max(ANCHO_BASE, w));
       const uu = v.anchos[v.skin] / ANCHO_BASE;
@@ -202,6 +215,10 @@ onBeforeUnmount(() => {
   <div class="reproductor" :data-skin="v.skin" :style="{ '--u': u }" @dragover.prevent @drop.prevent="soltarArchivos">
     <Defs :skin="v.skin" />
     <HeadAmp v-if="v.skin === 'cabeza'" :escala="escalaCabeza" @menu="abrirMenu" />
+    <template v-else-if="v.skin === 'compacta'">
+      <Compacta :base="v.baseCompacta" @skin="desdeCompacta" />
+      <div class="agarradera" title="Arrastra para agrandar" @pointerdown="agrandar"></div>
+    </template>
     <template v-else>
       <Principal :eq="v.eq" :pl="v.pl" :skin="v.skin" @alternar-eq="v.eq = !v.eq" @alternar-pl="v.pl = !v.pl" @menu="abrirMenu" />
       <Ecualizador v-if="v.eq" :skin="v.skin" @cerrar="v.eq = false" @menu="abrirMenu" />

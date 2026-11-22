@@ -4,8 +4,10 @@
 import { computed, ref } from "vue";
 import { cargar, encolar, mmss, motor, moverA, moverSeleccion, posicionEnCola, quitar, reemplazar, vaciar } from "./motor.js";
 import MenuContexto from "./MenuContexto.vue";
+import Mas from "../components/Mas.vue";
 import { api, pista } from "../api.js";
 import { agregarArchivos, agregarCarpeta } from "./disco.js";
+import { conServicio, menuAgregar } from "../plataforma.js";
 import { abrirVentana, arrastrarVentana } from "../ventanas/nativo.js";
 
 const emit = defineEmits(["cerrar", "menu"]);
@@ -13,6 +15,10 @@ const menu = ref(null);
 let ultimo = -1;
 
 const total = computed(() => motor.lista.reduce((s, p) => s + (p.duracion || 0), 0));
+// Se dibujan 50 filas (y siempre hasta la que suena); al bajar se suman 50 más.
+const POR_PAGINA = 50;
+const mostrar = ref(POR_PAGINA);
+const visibles = computed(() => motor.lista.slice(0, Math.max(mostrar.value, motor.actual + 10)));
 
 function clic(i, e) {
   if (recienArrastrado) return; // el clic que cierra un arrastre no cambia la selección
@@ -115,13 +121,13 @@ const aleatorizar = (l) => {
 };
 
 const MENUS = {
-  add: [
+  add: menuAgregar([
     ["Agregar archivos…", agregarArchivos],
     ["Agregar carpeta…", agregarCarpeta],
     ["Desde la biblioteca…  Alt+L", () => abrirVentana("biblioteca")],
     ["Abrir ubicación (enlaces)…  Ctrl+L", () => abrirVentana("ubicacion")],
     ["Descargas…  Alt+D", () => abrirVentana("descargas")],
-  ],
+  ]),
   misc: [
     ["Ordenar por título", () => reordenar(porCampo("titulo"))],
     ["Ordenar por artista", () => reordenar(porCampo("artista"))],
@@ -156,9 +162,10 @@ function avisar(texto) {
 async function abrirMenuLista() {
   if (menu.value === "list") return (menu.value = null);
   menu.value = "list";
+  if (!conServicio) return (playlists.value = []);
   try { playlists.value = (await api.playlists()).playlists; } catch { playlists.value = []; }
 }
-const opcionesLista = () => [
+const opcionesLista = () => !conServicio ? [["Vaciar lista", () => vaciar()]] : [
   ["Guardar como playlist…", guardarComoPlaylist],
   ...playlists.value.filter((p) => p.canciones)
     .map((p) => [`Cargar «${p.nombre}» (${p.canciones})${p.descarga ? " · descarga" : ""}`, () => cargarPlaylist(p.nombre)]),
@@ -180,7 +187,7 @@ function elegir(accion) {
 
     <div class="pl-lista" tabindex="0" @keydown.delete.prevent="quitarSeleccion" @keydown.ctrl.a.prevent="seleccionarTodo"
          @keydown="teclaLista" @pointerdown="menu = null">
-      <div v-for="(p, i) in motor.lista" :key="i" class="pl-fila" :data-i="i"
+      <div v-for="(p, i) in visibles" :key="i" class="pl-fila" :data-i="i"
            :class="{ actual: i === motor.actual, sel: motor.seleccion.has(i), 'marca-antes': marca === i,
                      'marca-despues': marca === motor.lista.length && i === motor.lista.length - 1 }"
            @pointerdown="empezarArrastre(i, $event)" @click="clic(i, $event)" @dblclick="cargar(i)"
@@ -188,7 +195,13 @@ function elegir(accion) {
         <span class="pl-nombre"><span v-if="posicionEnCola(p)" class="pl-cola" title="En cola: suena a continuación">[{{ posicionEnCola(p) }}]</span>{{ i + 1 }}. {{ p.artista ? p.artista + " - " : "" }}{{ p.titulo }}</span>
         <span class="pl-dur">{{ mmss(p.duracion) }}</span>
       </div>
-      <div v-if="!motor.lista.length" class="pl-vacia">Lista vacía.<br />Arrastra música aquí, usa ADD o abre la biblioteca (Alt+L).</div>
+      <Mas v-if="motor.lista.length > visibles.length" :quedan="motor.lista.length - visibles.length" @ver="mostrar += POR_PAGINA" />
+      <div v-if="!motor.lista.length" class="pl-vacia">
+        <template v-if="conServicio">Lista vacía.<br />Arrastra música aquí, usa ADD o abre la biblioteca (Alt+L).</template>
+        <template v-else>Lista vacía.<br />
+          <button class="pl-boton pl-agregar" @click="agregarCarpeta">Agregar una carpeta de música</button><br />
+          <span class="pl-nota">Incluye todas sus subcarpetas</span></template>
+      </div>
     </div>
 
     <div class="pl-pie">

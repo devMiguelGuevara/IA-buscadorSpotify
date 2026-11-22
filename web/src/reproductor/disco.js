@@ -3,6 +3,8 @@
 import { pista } from "../api.js";
 import { nativo } from "../ventanas/nativo.js";
 import { agregar, motor } from "./motor.js";
+import * as plataforma from "../plataforma.js";
+import { elegirAudiosLocales, pistaLocal } from "../archivosLocales.js";
 
 export async function agregarRutas(rutas, sonar = false) {
   if (!rutas?.length) return 0;
@@ -21,11 +23,20 @@ export async function agregarRutas(rutas, sonar = false) {
 }
 
 export async function agregarArchivos() {
+  if (plataforma.agregarArchivos) return plataforma.agregarArchivos();
+  if (!nativo()) {
+    // En el navegador: se reproducen los archivos elegidos, sin copiarlos.
+    const archivos = await elegirAudiosLocales();
+    if (!archivos.length) return 0;
+    agregar(archivos.map(pistaLocal), (motor.estado === "detenido" && motor.actual < 0) || motor.lista.length === 0);
+    return archivos.length;
+  }
   const rutas = await nativo()?.elegir_audios();
   return agregarRutas(rutas);
 }
 
 export async function agregarCarpeta() {
+  if (plataforma.agregarCarpeta) return plataforma.agregarCarpeta();
   const ruta = await nativo()?.elegir_carpeta();
   return ruta ? agregarRutas([ruta]) : 0;
 }
