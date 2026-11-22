@@ -44,6 +44,12 @@ async function elegirArchivo() {
   if (ruta) texto.value = (texto.value.trim() ? texto.value.trim() + "\n" : "") + ruta;
 }
 
+function limpiar() {
+  texto.value = "";
+  listas.value = null;
+  error.value = "";
+}
+
 async function revisar() {
   if (!texto.value.trim()) return;
   ocupado.value = true;
@@ -127,6 +133,7 @@ function agregarLasQueTengo() {
         <button class="wa-boton" :disabled="ocupado" @click="descargar(true)">Probar</button>
         <button class="wa-boton wa-principal" :disabled="ocupado || !resumen?.total" @click="descargar(false)">Descargar</button>
       </template>
+      <button class="wa-boton" :disabled="!texto && !listas" title="Vacía el texto y la vista previa" @click="limpiar">Limpiar</button>
       <button class="wa-boton" @click="emit('cerrar')">Cancelar</button>
     </template>
   </VentanaWinamp>

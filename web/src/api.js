@@ -16,6 +16,7 @@ export const api = {
   descargar: (texto, simular, metodo = "auto", formato = "original") =>
     pedir("/api/descargas", { texto, simular, metodo, formato }),
   controlar: (id, accion) => pedir(`/api/descargas/${id}/${accion}`, {}),
+  limpiarDescargas: () => pedir("/api/descargas/limpiar", {}),
   mejorables: () => pedir("/api/mejorar", undefined, "GET"),
   mejorar: (simular = false) => pedir("/api/mejorar", { simular }),
   descargas: () => pedir("/api/descargas"),

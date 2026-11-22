@@ -1,6 +1,6 @@
 <script setup>
 // Descargas: la cola de trabajos, cada uno con sus canciones y su estado.
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import VentanaWinamp from "./VentanaWinamp.vue";
 import { estado, revisarDescargas } from "../estado.js";
 import { api, pista } from "../api.js";
@@ -69,6 +69,13 @@ async function ytActualizar() {
   yt.value.ocupado = false;
 }
 
+// Limpiar: saca de la lista lo terminado, cancelado o con error.
+const terminados = computed(() => estado.trabajos.filter((t) => ["terminado", "cancelado", "error"].includes(t.estado)).length);
+async function limpiarTerminados() {
+  try { await api.limpiarDescargas(); } catch {}
+  await revisarDescargas();
+}
+
 function progreso(t) {
   const hechos = t.items.filter((i) => i.estado !== "en_cola").length;
   return t.items.length ? Math.round((hechos / t.items.length) * 100) : 0;
@@ -113,7 +120,9 @@ function progreso(t) {
       </div>
     </div>
     <template #pie>
-      <button class="wa-boton" @click="emit('abrir', 'ubicacion')">Agregar…</button>
+      <button class="wa-boton" @click="emit('abrir', 'ubicacion')">Buscar…</button>
+      <button class="wa-boton" :disabled="!terminados" title="Quita de la lista lo ya terminado (los archivos se quedan)"
+              @click="limpiarTerminados">Limpiar ({{ terminados }})</button>
       <template v-if="mejorables">
         <button v-if="!confirmando" class="wa-boton" title="Bajar de nuevo en su formato original las canciones que hoy son MP3"
                 @click="confirmando = true">Mejorar calidad ({{ mejorables }})</button>

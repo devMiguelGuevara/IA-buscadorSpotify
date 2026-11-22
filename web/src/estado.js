@@ -56,7 +56,7 @@ export async function revisarDescargas() {
     for (const it of t.items)
       if (it.estado === "ok" && it.archivo && !agregadas.has(it.archivo)) {
         agregadas.add(it.archivo);
-        nuevas.push(pista({ raiz: 0, ruta: it.archivo, titulo: it.titulo, artista: it.artista }));
+        nuevas.push(pista({ raiz: 0, ruta: it.archivo, url: it.reproducir || undefined, titulo: it.titulo, artista: it.artista }));
       }
   if (nuevas.length) {
     alTerminar?.(nuevas); // la biblioteca se va armando mientras descarga

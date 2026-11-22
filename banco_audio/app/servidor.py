@@ -91,6 +91,13 @@ class GestorDescargas:
         self._descargadores: dict[str, Descargador] = {}  # para pausar, reanudar o cancelar
         self._registro: Registro | None = None
 
+    def limpiar(self) -> int:
+        """Quita de la lista los trabajos terminados (no toca lo descargado ni lo que sigue en curso)."""
+        fin = [i for i, t in self.trabajos.items() if t["estado"] in ("terminado", "cancelado", "error")]
+        for i in fin:
+            self.trabajos.pop(i, None)
+        return len(fin)
+
     def controlar(self, id_: str, accion: str) -> dict:
         t, d = self.trabajos.get(id_), self._descargadores.get(id_)
         if not t:
@@ -377,6 +384,10 @@ def crear_app(destino: Path) -> FastAPI:
     @app.post("/api/descargas")
     def descargar(datos: Texto):
         return {"trabajos": gestor.iniciar(datos.texto, datos.simular, datos.metodo, datos.formato)}
+
+    @app.post("/api/descargas/limpiar")
+    def limpiar_descargas():
+        return {"quitados": gestor.limpiar()}
 
     @app.post("/api/descargas/{id_}/{accion}")
     def controlar(id_: str, accion: str):
