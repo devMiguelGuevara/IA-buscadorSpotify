@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import threading
+import time
 import uuid
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -16,7 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .. import actualizador, ajustes, complementos, conversion, niveles, playlists
+from .. import actualizador, ajustes, complementos, conversion, letras, niveles, playlists
 from ..biblioteca import EXTENSIONES, escanear, pista
 from ..cancion import segundos_a_duracion
 from ..descargador import FORMATOS, METODOS, Descargador, Opciones
@@ -54,6 +55,16 @@ class Ruta(BaseModel):
 
 class Rutas(BaseModel):
     rutas: list[str]
+
+
+class Sonando(BaseModel):
+    url: str = ""
+    titulo: str = ""
+    artista: str = ""
+    duracion: float = 0
+    tiempo: float = 0
+    estado: str = "detenido"
+    velocidad: float = 1
 
 
 def _dentro(ruta: Path, base: Path) -> bool:
@@ -333,6 +344,11 @@ def crear_app(destino: Path) -> FastAPI:
         """Ganancia para el volumen nivelado de una pista del reproductor."""
         return niveles.nivel(_archivo_de_url(url))
 
+    @app.get("/api/letra")
+    def letra(url: str, forzar: bool = False, solo_cache: bool = False):
+        """La letra de una pista: la guardada, o se busca (LRCLIB, YouTube Music) y se guarda."""
+        return letras.para_archivo(_archivo_de_url(url), forzar=forzar, solo_guardada=solo_cache)
+
     @app.post("/api/nivel/lote")
     def precalcular_niveles(datos: Rutas):
         """Mide en segundo plano las pistas de la lista, para que suenen sin esperar."""
@@ -544,6 +560,20 @@ def crear_app(destino: Path) -> FastAPI:
     @app.get("/api/cola")
     def leer_cola(desde: int = 0):
         return {"ordenes": cola[desde:], "n": len(cola)}
+
+    # ---------------- lo que suena, para la ventana de la letra (otra ventana, otro motor)
+    sonando: dict = {"estado": "detenido", "momento": 0.0}
+
+    @app.post("/api/sonando")
+    def avisar_sonando(datos: Sonando):
+        sonando.clear()
+        sonando.update(datos.model_dump(), momento=time.monotonic())
+        return {"ok": True}
+
+    @app.get("/api/sonando")
+    def leer_sonando():
+        # "edad": segundos desde el último aviso, para calcular el tiempo sin depender de relojes
+        return {**{k: v for k, v in sonando.items() if k != "momento"}, "edad": time.monotonic() - sonando["momento"]}
 
     if ESTATICOS.exists():
         app.mount("/", StaticFiles(directory=ESTATICOS, html=True), name="interfaz")

@@ -63,6 +63,13 @@ def registrar(registro: Registro, cancion: Cancion, r: Resultado, destino: Path,
     if r.calidad:
         extra["calidad"] = r.calidad
     registro.guardar(cancion, r.estado, **extra)
+    if r.estado == "ok" and r.archivo:
+        try:  # su letra, en segundo plano, con los datos limpios de la fuente
+            from .letras import al_descargar
+        except ImportError:
+            return
+        al_descargar(r.archivo, cancion.artista, cancion.titulo, cancion.duracion, cancion.album,
+                     r.candidato.url if r.candidato else "")
 
 
 def escribir_lista(nombre: str, canciones: list[Cancion], registro: Registro, destino: Path) -> int:

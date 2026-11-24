@@ -8,6 +8,10 @@ import Principal from "./Principal.vue";
 import Ecualizador from "./Ecualizador.vue";
 import Lista from "./Lista.vue";
 import MenuContexto from "./MenuContexto.vue";
+import Presentacion from "../components/Presentacion.vue";
+import { presentacion, terminarPresentacion } from "../presentacion.js";
+import Letra from "../components/Letra.vue";
+import { cerrarLetra, letra } from "../letras.js";
 import Biblioteca from "../components/Biblioteca.vue";
 import Descargas from "../components/Descargas.vue";
 import AbrirUbicacion from "../components/AbrirUbicacion.vue";
@@ -123,5 +127,7 @@ const cantidad = computed(() => ({
       </template>
     </main>
     <MenuContexto v-if="menu" v-bind="menu" @cerrar="menu = null" />
+    <Presentacion v-if="sola && presentacion.activa" @fin="terminarPresentacion" />
+    <Letra v-if="sola && letra.activa" @cerrar="cerrarLetra" />
   </div>
 </template>

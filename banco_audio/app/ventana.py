@@ -57,6 +57,8 @@ VENTANAS = {
     "descargas": ("MigueWamp · Descargas", 540, 420),
     "ubicacion": ("MigueWamp · Abrir ubicación", 640, 480),
     "laboratorio": ("MigueWamp · Laboratorio", 980, 660),
+    "presentacion": ("MigueWamp", 0, 0),  # pantalla completa (ver abrir)
+    "letra": ("MigueWamp · Letra", 0, 0),  # pantalla completa (ver abrir)
 }
 
 
@@ -105,9 +107,14 @@ class GestorVentanas:
         except Exception:
             pass
         api = ApiNativa(self, nombre)
-        ventana = webview.create_window(
-            titulo, f"{self.url}#ventana={nombre}", width=ancho, height=alto, x=x, y=y,
-            frameless=True, easy_drag=False, min_size=(340, 220), background_color=FONDO, js_api=api)
+        if nombre in ("presentacion", "letra"):  # pantalla completa; la presentación, además, encima de todo
+            ventana = webview.create_window(
+                titulo, f"{self.url}#ventana={nombre}", fullscreen=True, frameless=True, on_top=nombre == "presentacion",
+                easy_drag=False, background_color="#000000", js_api=api)
+        else:
+            ventana = webview.create_window(
+                titulo, f"{self.url}#ventana={nombre}", width=ancho, height=alto, x=x, y=y,
+                frameless=True, easy_drag=False, min_size=(340, 220), background_color=FONDO, js_api=api)
         api._ventana = ventana
         ventana.events.closed += lambda: self.ventanas.pop(nombre, None)
         self.ventanas[nombre] = ventana

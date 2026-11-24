@@ -1,11 +1,14 @@
 <script setup>
 // Ventana principal de MigueWamp, en vectores (lienzo de 275 x 116).
 // Skin clásica: botones plateados biselados. Skin moderna: botones redondos y esquinas suaves.
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Digitos from "./Digitos.vue";
 import { crearVisualizador } from "./visualizador.js";
 import { anterior, detener, irA, mmss, motor, pausa, pistaActual, reproducir, siguiente } from "./motor.js";
-import { abrirVentana, arrastrarVentana, nativo } from "../ventanas/nativo.js";
+import { arrastrarVentana, nativo } from "../ventanas/nativo.js";
+import { presentar } from "../presentacion.js";
+import { abrirLetra, buscarLetra, letra } from "../letras.js";
+import { conLetras } from "../plataforma.js";
 import { agregarArchivos } from "./disco.js";
 
 // holgura: espacio extra (en unidades del dibujo) arriba y abajo de la barra de tiempo. Lo usa
@@ -14,6 +17,39 @@ const props = defineProps({ eq: Boolean, pl: Boolean, skin: String, holgura: { t
 const emit = defineEmits(["alternar-eq", "alternar-pl", "menu"]);
 const svg = ref(null);
 const moderna = computed(() => props.skin === "moderna");
+
+// Rayo dorado: un clic no hace nada; dos clics seguidos lanzan la presentación. Se cuentan los
+// clics en vez de usar dblclick, que no todos los navegadores envían.
+let clicRayo = 0;
+function rayo() {
+  const ahora = Date.now();
+  if (ahora - clicRayo < 450) {
+    clicRayo = 0;
+    presentar();
+  } else clicRayo = ahora;
+}
+
+// EQ, PL y K (letra): con letras, los tres caben donde antes iban dos. El LED de la K se
+// enciende si la canción ya tiene su letra guardada.
+const letraGuardada = ref(false);
+async function revisarLetra() {
+  const p = pistaActual();
+  if (!conLetras() || !p) return (letraGuardada.value = false);
+  const r = await buscarLetra(p, { soloGuardada: true });
+  if (pistaActual()?.url === p.url) letraGuardada.value = r.tipo !== "ninguna";
+}
+watch(() => [pistaActual()?.url, letra.activa, conLetras()], revisarLetra, { immediate: true });
+onMounted(() => window.addEventListener("focus", revisarLetra)); // al volver de la ventana de la letra
+onBeforeUnmount(() => window.removeEventListener("focus", revisarLetra));
+const botonesVentana = computed(() => {
+  const lista = [
+    { id: "eq", texto: "EQ", led: props.eq, accion: () => emit("alternar-eq") },
+    { id: "pl", texto: "PL", led: props.pl, accion: () => emit("alternar-pl") },
+  ];
+  if (conLetras()) lista.push({ id: "k", texto: "K", led: letraGuardada.value, accion: abrirLetra });
+  const ancho = lista.length === 3 ? 15.5 : 23, paso = lista.length === 3 ? 16 : 24;
+  return lista.map((b, i) => ({ ...b, x: 219.5 + i * paso, ancho }));
+});
 
 // ---------- deslizadores
 function punto(e) {
@@ -173,15 +209,11 @@ const TRANSPORTE = [
     </g>
 
     <!-- EQ y PL -->
-    <g class="boton" @click="emit('alternar-eq')">
-      <rect class="cara" x="219.5" y="58" width="23" height="11" rx="1" />
-      <rect x="222.5" y="61.5" width="3" height="4" :class="props.eq ? 'led-on' : 'led-off'" />
-      <text x="234.5" y="66" class="boton-texto">EQ</text>
-    </g>
-    <g class="boton" @click="emit('alternar-pl')">
-      <rect class="cara" x="243.5" y="58" width="23" height="11" rx="1" />
-      <rect x="246.5" y="61.5" width="3" height="4" :class="props.pl ? 'led-on' : 'led-off'" />
-      <text x="258.5" y="66" class="boton-texto">PL</text>
+    <g v-for="b in botonesVentana" :key="b.id" class="boton" @click="b.accion">
+      <title v-if="b.id === 'k'">Letra de la canción</title>
+      <rect class="cara" :x="b.x" y="58" :width="b.ancho" height="11" rx="1" />
+      <rect :x="b.x + (b.ancho > 20 ? 3 : 2.2)" y="61.5" :width="b.ancho > 20 ? 3 : 2.5" height="4" :class="b.led ? 'led-on' : 'led-off'" />
+      <text :x="b.x + (b.ancho > 20 ? 15 : 10)" y="66" class="boton-texto">{{ b.texto }}</text>
     </g>
 
     <!-- posición (con holgura, baja y su zona táctil ocupa el espacio libre) -->
@@ -232,8 +264,8 @@ const TRANSPORTE = [
       <path d="M224 96.8l-2 1.7 2 1.7" fill="none" stroke="var(--icono)" stroke-width="1" />
     </g>
 
-    <!-- logo: abre la biblioteca -->
-    <g class="clic" @click="abrirVentana('biblioteca')">
+    <!-- rayo dorado: un clic no hace nada; doble clic, la presentación -->
+    <g class="clic rayo-logo" @click.stop="rayo" @dblclick.stop.prevent @mousedown.prevent>
       <rect x="248" y="87" width="20" height="19" fill="transparent" />
       <path d="M260 88.5l-7 9h5l-3 8.5 9-11h-5l3-6.5z" :fill="'var(--logo)'" stroke="#4a3a00" stroke-width="0.6" />
     </g>

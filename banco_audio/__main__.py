@@ -163,6 +163,18 @@ def cmd_diagnostico(args) -> None:
               "LUFS", d["sonoridad"].get("lufs"))
 
 
+def cmd_letra(args) -> None:
+    """Busca (o lee la guardada) la letra de un archivo de audio y la muestra."""
+    from .letras import para_archivo
+    archivo = Path(args.archivo).expanduser()
+    if not archivo.is_file():
+        raise SystemExit(f"No existe el archivo: {archivo}")
+    r = para_archivo(archivo, forzar=args.forzar)
+    print(f"{r['artista']} - {r['titulo']}: {r['tipo']}" + (f" ({r['fuente']})" if r["fuente"] else ""))
+    for segundos, texto in r["lineas"][: args.lineas]:
+        print(f"  {'' if segundos is None else f'{int(segundos // 60):02d}:{segundos % 60:05.2f}  '}{texto}")
+
+
 def cmd_app(args) -> None:
     from .app.ventana import lanzar
     lanzar(Path(args.destino).expanduser(), navegador=args.navegador, puerto=args.puerto)
@@ -272,6 +284,12 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("diagnostico", help="muestra qué niveles y motores puede usar esta instalación")
     p.add_argument("archivo", nargs="?", help="canción para probar el análisis")
     p.set_defaults(func=cmd_diagnostico)
+
+    p = sub.add_parser("letra", help="busca y guarda la letra de una canción (queda junto al audio, .lrc)")
+    p.add_argument("archivo", help="el archivo de audio")
+    p.add_argument("--forzar", action="store_true", help="buscar de nuevo aunque ya esté guardada")
+    p.add_argument("--lineas", type=int, default=12, help="cuántas líneas mostrar")
+    p.set_defaults(func=cmd_letra)
 
     p = sub.add_parser("app", help="abre el reproductor estilo Winamp con la biblioteca")
     p.add_argument("--destino", default=os.getenv("BANCO_AUDIO_DIR", str(RAIZ / "musica")),

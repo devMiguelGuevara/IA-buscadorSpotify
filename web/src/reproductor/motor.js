@@ -166,6 +166,14 @@ for (const p of platos) {
     if (motor.dormir === "cancion") return dormirAhora(false);
     siguiente(true);
   });
+  // Si el sistema pausa o reanuda el audio por su cuenta (una llamada, otra app que suena), el
+  // reproductor lo refleja. No cuentan el final de la canción ni los cambios de canción.
+  p.audio.addEventListener("pause", () => {
+    if (es() && p.audio.paused && !p.audio.ended && motor.estado === "sonando" && !fundiendo) motor.estado = "pausado";
+  });
+  p.audio.addEventListener("play", () => {
+    if (es() && !p.audio.paused && motor.estado === "pausado") motor.estado = "sonando";
+  });
   p.audio.addEventListener("error", () => {
     if (!es() || !p.audio.getAttribute("src")) return;
     motor.aviso = `No se pudo abrir «${pistaActual()?.titulo || "la canción"}»`;

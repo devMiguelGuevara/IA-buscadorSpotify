@@ -53,7 +53,8 @@ El programa espera entre una petición y otra. Si un servicio pide bajar el ritm
 | `musica/<lista>/` | Las canciones descargadas, una carpeta por lista. Puedes cambiar la carpeta en el `.env` |
 | `musica/registro_descargas.json` | Lo que ya se descargó |
 | `musica/memoria_busquedas.json` | Las búsquedas recientes, para no repetirlas al reintentar |
-| `cache/` | Medidas de volumen y copias para escuchar formatos como APE o WMA. Se puede borrar |
+| `musica/<lista>/<canción>.lrc` | La letra de la canción, guardada la primera vez que se encuentra |
+| `cache/` | Medidas de volumen, copias para escuchar formatos como APE o WMA y las letras de carpetas donde no se puede escribir. Se puede borrar |
 | `componentes/` | yt-dlp actualizado desde la app |
 | `.env` | Tus credenciales y ajustes. No se sube a GitHub |
 | `.cache-spotify` | El permiso de tu cuenta de Spotify. No se sube a GitHub |
@@ -68,6 +69,12 @@ El programa espera entre una petición y otra. Si un servicio pide bajar el ritm
 - En la lista: **encolar** con Q o clic derecho (suena a continuación), **reordenar** arrastrando o con Alt+↑/↓.
 - **Artistas y álbumes** en la biblioteca, e **importar listas** `.m3u`, `.m3u8` y `.pls` de otros reproductores.
 - Reproduce también APE, WMA, WavPack, AIFF, Musepack, TTA y AC3: los convierte una vez, solo para escucharlos.
+- **Letras (botón K, o Alt+K):**
+  - Se buscan en LRCLIB y en YouTube Music, una sola vez, y quedan en un `.lrc` junto a la canción. Las canciones recién descargadas buscan la suya solas.
+  - Se ven a pantalla completa; la X o Esc cierran.
+  - Si la letra trae tiempos, la línea que suena se resalta. Si es solo texto, avanza despacio con la canción.
+  - Si una letra no aparece, no se vuelve a buscar por unos días, salvo con "Buscar de nuevo".
+  - Para probarla sin abrir la app: `python -m banco_audio letra "<archivo>"`.
 
 ## Laboratorio de mejora
 

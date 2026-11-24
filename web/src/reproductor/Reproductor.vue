@@ -10,8 +10,12 @@ import Ecualizador from "./Ecualizador.vue";
 import Lista from "./Lista.vue";
 import HeadAmp from "./HeadAmp.vue";
 import Compacta from "./Compacta.vue";
+import Presentacion from "../components/Presentacion.vue";
+import { presentacion, terminarPresentacion } from "../presentacion.js";
+import Letra from "../components/Letra.vue";
+import { abrirLetra, cerrarLetra, letra } from "../letras.js";
 import MenuContexto from "./MenuContexto.vue";
-import { adelantar, agregar, anterior, detener, motor, pausa, programarDormir, reemplazar, reproducir, siguiente } from "./motor.js";
+import { adelantar, agregar, anterior, detener, motor, pausa, pistaActual, programarDormir, reemplazar, reproducir, siguiente } from "./motor.js";
 import { abrirVentana, fijarForma, nativo, redimensionarVentana } from "../ventanas/nativo.js";
 import { alTerminarDescarga, revisarDescargas } from "../estado.js";
 import { soltarArchivos } from "./disco.js";
@@ -149,6 +153,24 @@ async function revisarCola() {
   } catch {}
 }
 
+// --- lo que suena, para la ventana de la letra (es otra ventana: lo lee del servicio interno)
+let avisado = { t: 0, tiempo: 0 };
+function avisarSonando() {
+  if (!nativo()) return;
+  const p = pistaActual();
+  avisado = { t: Date.now(), tiempo: motor.tiempo || 0 };
+  fetch("/api/sonando", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: p?.url || "", titulo: p?.titulo || "", artista: p?.artista || "", duracion: motor.duracion || 0,
+      tiempo: motor.tiempo || 0, estado: motor.estado, velocidad: motor.velocidad || 1 }),
+  }).catch(() => {});
+}
+watch(() => [motor.estado, pistaActual()?.url, motor.duracion, motor.velocidad], avisarSonando);
+watch(() => motor.tiempo, (t) => {
+  const esperado = avisado.tiempo + (motor.estado === "sonando" ? ((Date.now() - avisado.t) / 1000) * (motor.velocidad || 1) : 0);
+  if (Math.abs(t - esperado) > 1.5 || Date.now() - avisado.t > 2000) avisarSonando(); // saltó, o cada 2 s
+});
+
 // --- atajos de Winamp
 function teclas(e) {
   if (e.target.closest?.("input, textarea")) return;
@@ -166,6 +188,7 @@ function teclas(e) {
   else if (e.altKey && k === "d") accion = () => abrirVentana("descargas");
   else if (e.altKey && k === "s") accion = siguienteSkin;
   else if (e.altKey && k === "m") accion = () => abrirVentana("laboratorio");
+  else if (e.altKey && k === "k") accion = abrirLetra;
   else if (e.altKey && k === "g") accion = () => (v.eq = !v.eq);
   else if (e.altKey && k === "e") accion = () => (v.pl = !v.pl);
   else if (!e.ctrlKey && !e.altKey) accion = acciones[k];
@@ -226,5 +249,7 @@ onBeforeUnmount(() => {
       <div class="agarradera" title="Arrastra para agrandar" @pointerdown="agrandar"></div>
     </template>
     <MenuContexto v-if="menu" v-bind="menu" @cerrar="menu = null" />
+    <Presentacion v-if="presentacion.activa" @fin="terminarPresentacion" />
+    <Letra v-if="letra.activa" @cerrar="cerrarLetra" />
   </div>
 </template>

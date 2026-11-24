@@ -7,7 +7,7 @@ import MenuContexto from "./MenuContexto.vue";
 import Mas from "../components/Mas.vue";
 import { api, pista } from "../api.js";
 import { agregarArchivos, agregarCarpeta } from "./disco.js";
-import { conServicio, menuAgregar } from "../plataforma.js";
+import { conPlaylists, conServicio, guardable, menuAgregar } from "../plataforma.js";
 import { abrirVentana, arrastrarVentana } from "../ventanas/nativo.js";
 
 const emit = defineEmits(["cerrar", "menu"]);
@@ -140,8 +140,9 @@ const playlists = ref([]);
 const aviso = ref("");
 
 async function guardarComoPlaylist() {
-  const pistas = motor.lista.filter((p) => p.ruta !== undefined);
-  if (!pistas.length) return avisar("La lista está vacía");
+  if (!motor.lista.length) return avisar("La lista está vacía");
+  const pistas = motor.lista.filter(guardable);
+  if (!pistas.length) return avisar("Estas canciones no se pueden guardar");
   const nombre = (window.prompt("Nombre de la playlist:", "") || "").trim();
   if (!nombre) return;
   try {
@@ -151,6 +152,20 @@ async function guardarComoPlaylist() {
     avisar("No se pudo guardar");
   }
 }
+// Borrar una playlist propia (las de las descargas no): se elige y se confirma.
+const porBorrar = ref("");
+async function borrarPlaylist() {
+  const nombre = porBorrar.value;
+  try {
+    await api.borrarPlaylist(nombre);
+    avisar(`Borrada «${nombre}»`);
+  } catch {
+    avisar("No se pudo borrar");
+  }
+}
+const propias = () => playlists.value.filter((p) => !p.descarga);
+const opcionesBorrar = () => propias().map((p) => [`Borrar «${p.nombre}»`, () => { porBorrar.value = p.nombre; menu.value = "confirmar"; }]);
+const opcionesConfirmar = () => [[`Sí, borrar «${porBorrar.value}»`, borrarPlaylist], ["No", () => {}]];
 async function cargarPlaylist(nombre) {
   const r = await api.playlist(nombre);
   reemplazar(r.pistas.filter((p) => p.existe !== false).map(pista));
@@ -162,16 +177,19 @@ function avisar(texto) {
 async function abrirMenuLista() {
   if (menu.value === "list") return (menu.value = null);
   menu.value = "list";
-  if (!conServicio) return (playlists.value = []);
+  if (!conPlaylists) return (playlists.value = []);
   try { playlists.value = (await api.playlists()).playlists; } catch { playlists.value = []; }
 }
-const opcionesLista = () => !conServicio ? [["Vaciar lista", () => vaciar()]] : [
+const opcionesLista = () => !conPlaylists ? [["Vaciar lista", () => vaciar()]] : [
   ["Guardar como playlist…", guardarComoPlaylist],
   ...playlists.value.filter((p) => p.canciones)
     .map((p) => [`Cargar «${p.nombre}» (${p.canciones})${p.descarga ? " · descarga" : ""}`, () => cargarPlaylist(p.nombre)]),
   ["Vaciar lista", () => vaciar()],
-  ["Biblioteca y playlists…", () => abrirVentana("biblioteca")],
+  ...(propias().length ? [["Borrar una playlist…", () => (menu.value = "borrar")]] : []),
+  ...(conServicio ? [["Biblioteca y playlists…", () => abrirVentana("biblioteca")]] : []),
 ];
+const itemsMenu = computed(() =>
+  ({ list: opcionesLista, borrar: opcionesBorrar, confirmar: opcionesConfirmar })[menu.value]?.() ?? MENUS[menu.value] ?? []);
 function elegir(accion) {
   menu.value = null;
   accion();
@@ -215,8 +233,8 @@ function elegir(accion) {
       <button class="pl-boton" @click="abrirMenuLista">LIST</button>
 
       <MenuContexto v-if="menuFila" v-bind="menuFila" @cerrar="menuFila = null" />
-      <div v-if="menu" class="pl-menu" :class="'menu-' + menu">
-        <div v-for="[texto, accion] in (menu === 'list' ? opcionesLista() : MENUS[menu])" :key="texto" class="pl-menu-item" @click="elegir(accion)">{{ texto }}</div>
+      <div v-if="menu" class="pl-menu" :class="'menu-' + (MENUS[menu] ? menu : 'list')">
+        <div v-for="[texto, accion] in itemsMenu" :key="texto" class="pl-menu-item" @click="elegir(accion)">{{ texto }}</div>
       </div>
     </div>
   </div>

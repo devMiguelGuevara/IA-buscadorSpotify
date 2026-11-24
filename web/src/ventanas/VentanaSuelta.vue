@@ -6,6 +6,8 @@ import Biblioteca from "../components/Biblioteca.vue";
 import Descargas from "../components/Descargas.vue";
 import AbrirUbicacion from "../components/AbrirUbicacion.vue";
 import Laboratorio from "../components/Laboratorio.vue";
+import Presentacion from "../components/Presentacion.vue";
+import Letra from "../components/Letra.vue";
 import { cargarBiblioteca, descargasActivas, revisarDescargas } from "../estado.js";
 import { abrirVentana, encolarEnReproductor, nativo } from "./nativo.js";
 
@@ -32,6 +34,7 @@ async function seguirSkin() {
 
 let reloj = 0, vueltas = 0;
 onMounted(() => {
+  if (props.nombre === "presentacion" || props.nombre === "letra") return; // nada que cargar: solo esa vista
   if (nativo()) seguirSkin();
   else window.addEventListener("pywebviewready", seguirSkin, { once: true });
   window.addEventListener("keydown", teclas);
@@ -49,7 +52,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Biblioteca v-if="nombre === 'biblioteca'" @cerrar="cerrar" @reproducir="reproducir" @encolar="encolar" @abrir="abrirVentana" />
+  <Presentacion v-if="nombre === 'presentacion'" @fin="cerrar" />
+  <Letra v-else-if="nombre === 'letra'" remoto @cerrar="cerrar" />
+  <Biblioteca v-else-if="nombre === 'biblioteca'" @cerrar="cerrar" @reproducir="reproducir" @encolar="encolar" @abrir="abrirVentana" />
   <Descargas v-else-if="nombre === 'descargas'" @cerrar="cerrar" @abrir="abrirVentana" />
   <Laboratorio v-else-if="nombre === 'laboratorio'" @cerrar="cerrar" />
   <AbrirUbicacion v-else @cerrar="cerrar" @iniciada="iniciada" @reproducir="reproducir" />
